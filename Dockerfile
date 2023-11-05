@@ -11,4 +11,4 @@ RUN python3 -m pip install --upgrade pip \
     ipywidgets==7.7.5
 
 RUN pip install --no-cache-dir \
-    hydra-core 
+    hydra-core segmentation-models-pytorch numexpr==2.8.4

@@ -1,3 +1,14 @@
+/input
+/output
+/processed
+/wandb
+/.keras
+/.config
+/.py3   
+/.nv
+.netrc
+.bash_history
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
