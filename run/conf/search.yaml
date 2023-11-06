@@ -1,0 +1,16 @@
+# ---------- Overriding hydra default configs ----------
+hydra:
+  # hydraで自動的にログファイルが生成されるのを防ぐ
+  output_subdir: null
+  job:
+    name: search
+    chdir: False
+  run:
+    dir: .
+
+defaults:
+  - _self_
+  - .@train: train
+
+base_dir: output/train/
+exp: exp001

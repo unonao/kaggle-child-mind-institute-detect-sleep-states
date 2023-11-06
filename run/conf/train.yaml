@@ -12,7 +12,7 @@ hydra:
 defaults:
   - _self_
   - dir: local
-  - model: Spec2DCNN
+  - model: Spec2DCNN 
   - feature_extractor: CNNSpectrogram
   - decoder: UNet1DDecoder
   - split: fold_0

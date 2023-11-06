@@ -38,9 +38,7 @@ class SegModel(LightningModule):
         self.validation_step_outputs: list = []
         self.__best_loss = np.inf
 
-    def forward(
-        self, x: torch.Tensor, labels: Optional[torch.Tensor] = None
-    ) -> dict[str, Optional[torch.Tensor]]:
+    def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> dict[str, Optional[torch.Tensor]]:
         return self.model(x, labels)
 
     def training_step(self, batch, batch_idx):
@@ -71,6 +69,7 @@ class SegModel(LightningModule):
                 prog_bar=True,
             )
         elif mode == "val":
+            # アップサンプリングやダウンサンプリングで長さが変わっているのでリサイズしてもとに戻す
             resized_logits = resize(
                 logits.sigmoid().detach().cpu(),
                 size=[self.duration, logits.shape[2]],

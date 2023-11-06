@@ -6,6 +6,9 @@
 /.config
 /.py3   
 /.nv
+/.local
+/.ipython
+/.virtual_documents
 .netrc
 .bash_history
 
