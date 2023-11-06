@@ -38,5 +38,7 @@ python run/search.py exp=exp002 #  score: 0.7408391055155943, th: 0.003853673314
 python run/search.py exp=exp003 #  score: 0.7619025463250211, th: 0.0038536733146294715
 
 # search distance
-python run/search.py exp=exp003 train.post_process.score_th=0.005
+python run/search.py exp=exp003 train.post_process.score_th=0.0038536733146294715 # score: 0.7681632805495759, th: 75
 ```
+
+#### inference
