@@ -9,8 +9,8 @@ hydra:
     dir: .
 
 defaults:
-  - _self_
-  - .@train: train
+  - train@_here_
 
+how: threshold # threshold or distance
 base_dir: output/train/
 exp: exp001
