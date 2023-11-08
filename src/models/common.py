@@ -14,16 +14,12 @@ from src.models.feature_extractor.spectrogram import SpecFeatureExtractor
 from src.models.spec1D import Spec1D
 from src.models.spec2Dcnn import Spec2DCNN
 
-FEATURE_EXTRACTORS = Union[
-    CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor
-]
+FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
 MODELS = Union[Spec1D, Spec2DCNN]
 
 
-def get_feature_extractor(
-    cfg: DictConfig, feature_dim: int, num_timesteps: int
-) -> FEATURE_EXTRACTORS:
+def get_feature_extractor(cfg: DictConfig, feature_dim: int, num_timesteps: int) -> FEATURE_EXTRACTORS:
     feature_extractor: FEATURE_EXTRACTORS
     if cfg.feature_extractor.name == "CNNSpectrogram":
         feature_extractor = CNNSpectrogram(
@@ -122,6 +118,7 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             encoder_weights=cfg.model.encoder_weights,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
+            pos_weights=cfg.pos_weights,
         )
     elif cfg.model.name == "Spec1D":
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
@@ -131,6 +128,7 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             decoder=decoder,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
+            pos_weights=cfg.pos_weights,
         )
     else:
         raise NotImplementedError

@@ -14,6 +14,7 @@ class Spec1D(nn.Module):
         decoder: nn.Module,
         mixup_alpha: float = 0.5,
         cutmix_alpha: float = 0.5,
+        pos_weights: Optional[list[float]] = None,
     ):
         super().__init__()
         self.feature_extractor = feature_extractor
@@ -21,7 +22,11 @@ class Spec1D(nn.Module):
         self.channels_fc = nn.Linear(feature_extractor.out_chans, 1)
         self.mixup = Mixup(mixup_alpha)
         self.cutmix = Cutmix(cutmix_alpha)
-        self.loss_fn = nn.BCEWithLogitsLoss()
+        if pos_weights is None:
+            self.loss_fn = nn.BCEWithLogitsLoss()
+        else:
+            class_pos_weight = torch.tensor(pos_weights)
+            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=class_pos_weight)
 
     def forward(
         self,
