@@ -9,6 +9,7 @@
 /.local
 /.ipython
 /.virtual_documents
+/.jupyter
 .netrc
 .bash_history
 
