@@ -28,13 +28,10 @@ def load_model(cfg: DictConfig) -> nn.Module:
 
     # load weights
     if cfg.weight is not None:
-        weight_path = (
-            Path(cfg.dir.model_dir)
-            / cfg.weight["exp_name"]
-            / cfg.weight["run_name"]
-            / "best_model.pth"
+        weight_path = Path(cfg.dir.model_dir) / cfg.weight["exp_name"] / cfg.weight["run_name"] / "best_model.pth"
+        model.load_state_dict(
+            torch.load(weight_path), strict=False  #  Unexpected key(s) in state_dict: "loss_fn.pos_weight". の回避
         )
-        model.load_state_dict(torch.load(weight_path))
         print('load weight from "{}"'.format(weight_path))
     return model
 
@@ -96,9 +93,7 @@ def inference(
     return keys, preds  # type: ignore
 
 
-def make_submission(
-    keys: list[str], preds: np.ndarray, downsample_rate, score_th, distance
-) -> pl.DataFrame:
+def make_submission(keys: list[str], preds: np.ndarray, downsample_rate, score_th, distance) -> pl.DataFrame:
     sub_df = post_process_for_seg(
         keys,
         preds[:, :, [1, 2]],  # type: ignore

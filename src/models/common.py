@@ -118,7 +118,7 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             encoder_weights=cfg.model.encoder_weights,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
-            pos_weights=cfg.pos_weights,
+            pos_weight=cfg.pos_weight if "pos_weight" in cfg else None,
         )
     elif cfg.model.name == "Spec1D":
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
@@ -128,7 +128,7 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             decoder=decoder,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
-            pos_weights=cfg.pos_weights,
+            pos_weight=cfg.pos_weight if "pos_weight" in cfg else None,
         )
     else:
         raise NotImplementedError
