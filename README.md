@@ -55,5 +55,6 @@ python run/score.py exp=exp008_0 split=stratify_fold_0 how=group_by_day # score:
 
 #### inference
 
-
-
+```sh
+python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test  how_post_process=group_by_day
+```

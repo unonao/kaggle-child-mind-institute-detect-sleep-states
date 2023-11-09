@@ -15,10 +15,7 @@ def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df
     series2numsteps_dict = dict(count_df.select("series_id", "counts").iter_rows())
 
     # 順序を保ったままseries_idを取得
-    all_series_ids = val_df.get_column("series_id").to_numpy()
-    _, idx = np.unique(all_series_ids, return_index=True)
-    unique_series_ids = all_series_ids[np.sort(idx)]
-
+    unique_series_ids = val_df.get_column("series_id").unique(maintain_order=True).to_list()
     key_series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
 
     # val_dfに合わせた順番でpredsから予測結果を取得

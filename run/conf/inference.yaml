@@ -22,6 +22,8 @@ weight:
   exp_name: ${exp_name}
   run_name: single
 
+how_post_process: 'peaks' # group_by_day
+
 seed: 42
 duration: 5760 # durationは32の倍数
 downsample_rate: 2 # durationをdownsample_rateで割った値がnum_framesになる

@@ -14,7 +14,7 @@ from tqdm import tqdm
 from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_size
 from src.models.common import get_model
 from src.utils.common import trace
-from src.utils.post_process import post_process_for_seg
+from src.utils.post_process import post_process_for_seg, post_process_for_seg_group_by_day
 
 
 def load_model(cfg: DictConfig) -> nn.Module:
@@ -64,6 +64,14 @@ def get_test_dataloader(cfg: DictConfig) -> DataLoader:
         drop_last=False,
     )
     return test_dataloader
+
+
+def get_test_series(cfg: DictConfig) -> pl.DataFrame:
+    if cfg.phase == "train":
+        test_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet")
+    elif cfg.phase == "test":
+        test_df = pl.read_parquet(Path(cfg.dir.data_dir) / "test_series.parquet")
+    return test_df
 
 
 def inference(
@@ -118,13 +126,20 @@ def main(cfg: DictConfig):
         keys, preds = inference(cfg.duration, test_dataloader, model, device, use_amp=cfg.use_amp)
 
     with trace("make submission"):
-        sub_df = make_submission(
-            keys,
-            preds,
-            downsample_rate=cfg.downsample_rate,
-            score_th=cfg.post_process.score_th,
-            distance=cfg.post_process.distance,
-        )
+        if cfg.how_post_process == "peaks":
+            sub_df = post_process_for_seg(
+                keys,
+                preds[:, :, [1, 2]],
+                score_th=cfg.post_process.score_th,
+                distance=cfg.post_process.distance,
+            )
+        elif cfg.how_post_process == "group_by_day":
+            test_df = get_test_series(cfg)
+            sub_df = post_process_for_seg_group_by_day(
+                keys,
+                preds[:, :, [1, 2]],
+                test_df,
+            )
     sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
 
 
