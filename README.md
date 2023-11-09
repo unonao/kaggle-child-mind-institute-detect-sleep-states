@@ -36,18 +36,24 @@ python run/train.py exp_name=exp007_0 split=stratify_fold_0 batch_size=32 featur
 python run/train.py exp_name=exp008_0 split=stratify_fold_0 batch_size=32 feature_extractor=CNNSpectrogram "pos_weight=[1.0, 10.0, 10.0]"
 ```
 
-#### search
+#### score
 ```sh
-# search th
-python run/search.py exp=exp005_0 split=stratify_fold_0 how=threshold # score: 0.6972691106831039, th: 0.0038536733146294715
-python run/search.py exp=exp007_0 split=stratify_fold_0 how=threshold # score: 0.7140820749853363, th: 0.0038536733146294715
+# score th
+python run/score.py exp=exp005_0 split=stratify_fold_0 how=threshold # score: 0.6972691106831039, th: 0.0038536733146294715
+python run/score.py exp=exp007_0 split=stratify_fold_0 how=threshold # score: 0.7140820749853363, th: 0.0038536733146294715
 
-# search distance
-python run/search.py exp=exp005_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7064557388270514, th: 70
-python run/search.py exp=exp006_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7176154573874453, th: 64
-python run/search.py exp=exp007_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7199185318854219, th: 79
-python run/search.py exp=exp008_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7207154455037633, th: 69
+# score distance
+python run/score.py exp=exp005_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7064557388270514, distance: 70
+python run/score.py exp=exp006_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7176154573874453, distance: 64
+python run/score.py exp=exp007_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7199185318854219, distance: 79
+python run/score.py exp=exp008_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7207154455037633, distance: 69
 
+
+python run/score.py exp=exp007_0 split=stratify_fold_0 how=group_by_day 
+python run/score.py exp=exp008_0 split=stratify_fold_0 how=group_by_day # score: 0.6601665731898787
 ```
 
 #### inference
+
+
+
