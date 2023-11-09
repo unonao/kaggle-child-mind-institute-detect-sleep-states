@@ -18,6 +18,7 @@ class Spec2DCNN(nn.Module):
         encoder_weights: Optional[str] = None,
         mixup_alpha: float = 0.5,
         cutmix_alpha: float = 0.5,
+        weight: Optional[list[float]] = None,
         pos_weight: Optional[list[float]] = None,
     ):
         super().__init__()
@@ -31,8 +32,9 @@ class Spec2DCNN(nn.Module):
         self.decoder = decoder
         self.mixup = Mixup(mixup_alpha)
         self.cutmix = Cutmix(cutmix_alpha)
+        self.weight = torch.tensor(weight) if weight is not None else None
         self.pos_weight = torch.tensor(pos_weight) if pos_weight is not None else None
-        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
+        self.loss_fn = nn.BCEWithLogitsLoss(weight=self.weight, pos_weight=self.pos_weight)
 
     def forward(
         self,

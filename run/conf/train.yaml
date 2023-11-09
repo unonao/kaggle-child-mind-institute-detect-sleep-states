@@ -58,11 +58,14 @@ labels:
   - "awake"
   - "event_onset"
   - "event_wakeup"
+label_weight:
+  - 1.0
+  - 1.0
+  - 1.0
 pos_weight:
   - 1.0
   - 1.0
   - 1.0
-
 
 # feature
 features:
