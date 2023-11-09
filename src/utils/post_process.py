@@ -3,6 +3,62 @@ import polars as pl
 from scipy.signal import find_peaks
 
 
+def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df: pl.DataFrame) -> pl.DataFrame:
+    """
+    Args:
+        keys (list[str]): 予測したchunkのkey({series_id}_{chunk_id})
+        preds (np.ndarray): (chunk_num, duration, 2)
+        val_df (pl.DataFrame): sequence
+    """
+    # valid の各ステップに予測結果を付与
+    count_df = val_df.get_column("series_id").value_counts()
+    series2numsteps_dict = dict(count_df.select("series_id", "counts").iter_rows())
+
+    # 順序を保ったままseries_idを取得
+    all_series_ids = val_df.get_column("series_id").to_numpy()
+    _, idx = np.unique(all_series_ids, return_index=True)
+    unique_series_ids = all_series_ids[np.sort(idx)]
+
+    key_series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
+
+    # val_dfに合わせた順番でpredsから予測結果を取得
+    preds_list = []
+    for series_id in unique_series_ids:
+        series_idx = np.where(key_series_ids == series_id)[0]
+        this_series_preds = preds[series_idx].reshape(-1, 2)
+        this_series_preds = this_series_preds[: series2numsteps_dict[series_id], :]
+        preds_list.append(this_series_preds)
+
+    preds_all = np.concatenate(preds_list, axis=0)
+    valid_preds_df = val_df.with_columns(
+        pl.Series(name="prediction_onset", values=preds_all[:, 0]),
+        pl.Series(name="prediction_wakeup", values=preds_all[:, 1]),
+    )
+    valid_preds_df = valid_preds_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z"))
+
+    # from sakami-san code
+    def make_submission(preds_df: pl.DataFrame) -> pl.DataFrame:
+        event_dfs = [
+            preds_df.with_columns(pl.lit(event).alias("event"), pl.col("timestamp").dt.date().alias("date"))
+            .group_by(["series_id", "date"])
+            .agg(pl.all().sort_by(f"prediction_{event}").last())
+            .rename({f"prediction_{event}": "score"})
+            .select(["series_id", "step", "event", "score"])
+            for event in ["onset", "wakeup"]
+        ]
+        submission_df = (
+            pl.concat(event_dfs)
+            .sort(["series_id", "step"])
+            .with_columns(pl.arange(0, pl.count()).alias("row_id"))
+            .select(["row_id", "series_id", "step", "event", "score"])
+        )
+        return submission_df
+
+    submission_df = make_submission(valid_preds_df)
+
+    return submission_df
+
+
 def post_process_for_seg(
     keys: list[str], preds: np.ndarray, score_th: float = 0.01, distance: int = 5000
 ) -> pl.DataFrame:
