@@ -15,7 +15,7 @@ def resize_1d_array(array, new_size):
     return np.interp(np.linspace(0, len(array) - 1, new_size), np.arange(len(array)), array)
 
 
-def detect_periodicity(seq: np.ndarray, downsample_rate: int = 60, split_hour: int = 8) -> np.ndarray:
+def predict_periodicity(seq: np.ndarray, downsample_rate: int = 60, split_hour: int = 8) -> np.ndarray:
     """
     split_hourごとにフレームに分割して、同じ波形が現れたフレームは周期性ありとみなす
 
