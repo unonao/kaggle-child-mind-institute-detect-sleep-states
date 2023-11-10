@@ -23,6 +23,7 @@ class SegModel(LightningModule):
         feature_dim: int,
         num_classes: int,
         duration: int,
+        fold: int | None = None,
     ):
         super().__init__()
         self.cfg = cfg
@@ -35,6 +36,7 @@ class SegModel(LightningModule):
             num_timesteps=num_timesteps // cfg.downsample_rate,
         )
         self.duration = duration
+        self.postfix = f"_fold{fold}" if fold is not None else ""
         self.validation_step_outputs: list = []
         self.__best_loss = np.inf
 
@@ -61,7 +63,7 @@ class SegModel(LightningModule):
 
         if mode == "train":
             self.log(
-                f"{mode}_loss",
+                f"{mode}_loss{self.postfix}",
                 loss.detach().item(),
                 on_step=False,
                 on_epoch=True,
@@ -89,7 +91,7 @@ class SegModel(LightningModule):
                 )
             )
             self.log(
-                f"{mode}_loss",
+                f"{mode}_loss{self.postfix}",
                 loss.detach().item(),
                 on_step=False,
                 on_epoch=True,
@@ -115,14 +117,14 @@ class SegModel(LightningModule):
             distance=self.cfg.post_process.distance,
         )
         score = event_detection_ap(self.val_event_df.to_pandas(), val_pred_df.to_pandas())
-        self.log("val_score", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)
+        self.log(f"val_score{self.postfix}", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)
 
         if loss < self.__best_loss:
-            np.save("keys.npy", np.array(keys))
-            np.save("labels.npy", labels)
-            np.save("preds.npy", preds)
-            val_pred_df.write_csv("val_pred_df.csv")
-            torch.save(self.model.state_dict(), "best_model.pth")
+            np.save(f"keys{self.postfix}.npy", np.array(keys))
+            np.save(f"labels{self.postfix}.npy", labels)
+            np.save(f"preds{self.postfix}.npy", preds)
+            val_pred_df.write_csv(f"val_pred_df{self.postfix}.csv")
+            torch.save(self.model.state_dict(), f"best_model{self.postfix}.pth")
             print(f"Saved best model {self.__best_loss} -> {loss}")
             self.__best_loss = loss
 

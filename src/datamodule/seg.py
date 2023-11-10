@@ -302,18 +302,28 @@ class TestDataset(Dataset):
 # DataModule
 ###################
 class SegDataModule(LightningDataModule):
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig, fold: int | None = None):
         super().__init__()
         self.cfg = cfg
         self.data_dir = Path(cfg.dir.data_dir)
         self.processed_dir = Path(cfg.dir.processed_dir)
         self.event_df = pl.read_csv(self.data_dir / "train_events.csv").drop_nulls()
-        self.train_event_df = self.event_df.filter(pl.col("series_id").is_in(self.cfg.split.train_series_ids))
-        self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.cfg.split.valid_series_ids))
+        self.fold = fold
+
+        if self.fold is None:  # single fold
+            self.train_series_ids = self.cfg.split.train_series_ids
+            self.valid_series_ids = self.cfg.split.valid_series_ids
+        else:
+            self.train_series_ids = self.cfg[f"fold_{fold}"].train_series_ids
+            self.valid_series_ids = self.cfg[f"fold_{fold}"].valid_series_ids
+
+        self.train_event_df = self.event_df.filter(pl.col("series_id").is_in(self.train_series_ids))
+        self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
+
         # train data
         self.train_features = load_features(
             feature_names=self.cfg.features,
-            series_ids=self.cfg.split.train_series_ids,
+            series_ids=self.train_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
         )
@@ -322,7 +332,7 @@ class SegDataModule(LightningDataModule):
         self.valid_chunk_features = load_chunk_features(
             duration=self.cfg.duration,
             feature_names=self.cfg.features,
-            series_ids=self.cfg.split.valid_series_ids,
+            series_ids=self.valid_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
         )

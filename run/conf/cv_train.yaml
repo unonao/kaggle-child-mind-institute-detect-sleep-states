@@ -1,0 +1,93 @@
+# ---------- Overriding hydra default configs ----------
+hydra:
+  job:
+    name: cv_train
+    chdir: true
+  run:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}/cv
+  sweep:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}
+    subdir: run${hydra.job.num}
+
+defaults:
+  - _self_
+  - dir: local
+  - model: Spec2DCNN 
+  - feature_extractor: CNNSpectrogram
+  - decoder: UNet1DDecoder
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
+
+num_fold: 5
+
+seed: 42
+exp_name: dummy
+duration: 5760 # (1step 5秒なので) duration * 5 = 秒数。 eg) 5760 * 5 = 28800s = 8h
+downsample_rate: 2
+upsample_rate: 1
+
+# training
+epoch: 50
+batch_size: 32
+num_workers: 8
+accelerator: auto
+use_amp: true
+debug: false
+gradient_clip_val: 1.0
+accumulate_grad_batches: 1
+monitor: val_loss
+monitor_mode: min
+check_val_every_n_epoch: 1
+
+# Dataset
+offset: 10
+sigma: 10
+bg_sampling_rate: 0.5
+
+# augmentation
+augmentation:
+  mixup_prob: 0.0
+  mixup_alpha: 0.4
+  cutmix_prob: 0.0
+  cutmix_alpha: 0.4
+  
+# post_process
+post_process:
+  score_th: 0.001
+  distance: 80
+
+# label
+labels:
+  - "awake"
+  - "event_onset"
+  - "event_wakeup"
+label_weight:
+  - 1.0
+  - 1.0
+  - 1.0
+pos_weight:
+  - 1.0
+  - 1.0
+  - 1.0
+
+# feature
+features:
+  - "anglez"
+  - "enmo"
+  # - "month_sin"
+  # - "month_cos"
+  - "hour_sin"
+  - "hour_cos"
+  # - "minute_sin"
+  # - "minute_cos"
+
+# optimizer
+optimizer:
+  lr: 0.0005
+
+# scheduler
+scheduler:
+  num_warmup_steps: 0
