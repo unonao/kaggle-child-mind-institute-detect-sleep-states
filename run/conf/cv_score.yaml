@@ -20,7 +20,7 @@ num_fold: 5
 
 # score
 post_process:
-  score_th: 0.001
+  score_th: 0.0038536
   distance: 80
   remove_periodicity: true
 
