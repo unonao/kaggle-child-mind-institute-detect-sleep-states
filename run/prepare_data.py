@@ -26,6 +26,10 @@ FEATURE_NAMES = [
     "month_cos",
     "minute_sin",
     "minute_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "activity_count",
+    "lids",
 ]
 
 ANGLEZ_MEAN = -8.810476
@@ -47,6 +51,12 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         *to_coord(pl.col("timestamp").dt.hour(), 24, "hour"),
         *to_coord(pl.col("timestamp").dt.month(), 12, "month"),
         *to_coord(pl.col("timestamp").dt.minute(), 60, "minute"),
+        *to_coord(pl.col("timestamp").dt.weekday(), 7, "weekday"),
+        # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
+        pl.col("enmo").map_batches(lambda x: np.maximum(x - 0.02, 0)).rolling_sum(10 * 60 // 5, center=True, min_periods=1).rolling_mean(30 * 60 // 5, center=True, min_periods=1).alias("activity_count"),
+    ).with_columns(
+        # 100/ (activity_count + 1)      
+        (1 / (pl.col("activity_count") + 1)).alias("lids"),
     ).select("series_id", *FEATURE_NAMES)
     return series_df
 
