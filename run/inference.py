@@ -102,17 +102,6 @@ def inference(
     return keys, preds  # type: ignore
 
 
-def make_submission(keys: list[str], preds: np.ndarray, downsample_rate, score_th, distance) -> pl.DataFrame:
-    sub_df = post_process_for_seg(
-        keys,
-        preds[:, :, [1, 2]],  # type: ignore
-        score_th=score_th,
-        distance=distance,  # type: ignore
-    )
-
-    return sub_df
-
-
 @hydra.main(config_path="conf", config_name="inference", version_base="1.2")
 def main(cfg: DictConfig):
     seed_everything(cfg.seed)

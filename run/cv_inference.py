@@ -100,19 +100,7 @@ def inference(
             keys.extend(key)
 
     preds = np.concatenate(preds)
-
-    return keys, preds  # type: ignore
-
-
-def make_submission(keys: list[str], preds: np.ndarray, downsample_rate, score_th, distance) -> pl.DataFrame:
-    sub_df = post_process_for_seg(
-        keys,
-        preds[:, :, [1, 2]],  # type: ignore
-        score_th=score_th,
-        distance=distance,  # type: ignore
-    )
-
-    return sub_df
+    return keys, preds
 
 
 @hydra.main(config_path="conf", config_name="cv_inference", version_base="1.2")
@@ -146,6 +134,7 @@ def main(cfg: DictConfig):
                 preds[:, :, [1, 2]],
                 score_th=cfg.post_process.score_th,
                 distance=cfg.post_process.distance,
+                periodicity_dict=periodicity_dict,
             )
         elif cfg.how_post_process == "group_by_day":
             test_df = get_test_series(cfg)
