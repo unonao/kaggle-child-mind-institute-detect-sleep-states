@@ -43,6 +43,6 @@ python run/score.py exp=exp007_0 split=stratify_fold_0 how=score  # 0.7170
 
 
 ## cv score
-python run/cv_score.py exp=exp011 post_process.remove_periodicity=false # 0.7370
-python run/cv_score.py exp=exp011 post_process.remove_periodicity=true # 0.7494
+python run/cv_score.py exp=exp011 post_process.remove_periodicity=false # 0.7368
+python run/cv_score.py exp=exp011 post_process.remove_periodicity=true # 0.7493
 ```
