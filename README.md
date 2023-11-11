@@ -30,5 +30,7 @@ python run/train.py exp_name=exp007_0 split=stratify_fold_0 batch_size=32 featur
 #### inference
 
 ```sh
-python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test  how_post_process=group_by_day
+python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test post_process.remove_periodicity=true
+
+python -m run.cv_inference exp_name=exp011 model.encoder_weights=null phase=test  post_process.remove_periodicity=true
 ```

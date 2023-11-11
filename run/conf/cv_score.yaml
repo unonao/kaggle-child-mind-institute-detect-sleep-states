@@ -13,8 +13,10 @@ defaults:
   - _self_
 
 how: score # score, threshold or distance
-base_dir: /tmp/working/output/train/
+base_dir: /tmp/working/output/cv_train/
 exp: exp001
+
+num_fold: 5
 
 # score
 post_process:

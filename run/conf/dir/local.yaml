@@ -2,4 +2,5 @@ data_dir: /tmp/working/input/child-mind-institute-detect-sleep-states
 processed_dir: /tmp/working/processed
 output_dir: /tmp/working/output
 model_dir: /tmp/working/output/train
+cv_model_dir: /tmp/working/output/cv_train
 sub_dir: ./

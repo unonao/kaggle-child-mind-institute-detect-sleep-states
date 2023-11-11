@@ -40,4 +40,9 @@ python run/score.py exp=exp008_0 split=stratify_fold_0 how=group_by_day # score:
 
 python run/score.py exp=exp007_0 split=stratify_fold_0 how=score score.remove_periodicity=False # 0.7137
 python run/score.py exp=exp007_0 split=stratify_fold_0 how=score  # 0.7170
+
+
+## cv score
+python run/cv_score.py exp=exp011 post_process.remove_periodicity=false # 0.7370
+python run/cv_score.py exp=exp011 post_process.remove_periodicity=true # 0.7494
 ```
