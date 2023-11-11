@@ -24,13 +24,13 @@ python run/prepare_data.py phase=test
 #### train
 ```sh
 python run/train.py exp_name=exp007_0 split=stratify_fold_0 batch_size=32 feature_extractor=CNNSpectrogram "pos_weight=[1.0, 5.0, 5.0]"
+python run/cv_train.py exp_name=exp011 "pos_weight=[1.0, 5.0, 5.0]" 
 
-```
+``` 
 
 #### inference
 
 ```sh
-python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test post_process.score_th=0.0038536 post_process.remove_periodicity=true
-
-python -m run.cv_inference exp_name=exp011 model.encoder_weights=null phase=test  post_process.score_th=0.0038536 post_process.remove_periodicity=true
+python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test post_process.remove_periodicity=true batch_size=8
+python -m run.cv_inference exp_name=exp011 model.encoder_weights=null phase=test post_process.remove_periodicity=true batch_size=8
 ```

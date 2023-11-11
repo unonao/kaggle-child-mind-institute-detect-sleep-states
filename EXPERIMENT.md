@@ -17,32 +17,16 @@ python run/train.py exp_name=exp008_0 split=stratify_fold_0 batch_size=32 featur
 python run/train.py exp_name=exp009_0 split=stratify_fold_0 batch_size=32 feature_extractor=CNNSpectrogram "pos_weight=[1.0, 5.0, 5.0]" "label_weight=[0.1, 1.0, 1.0]"
 python run/train.py exp_name=exp010_0 split=stratify_fold_0 batch_size=32 feature_extractor=CNNSpectrogram "pos_weight=[1.0, 5.0, 5.0]" "label_weight=[0.0, 1.0, 1.0]"
 
-# best
-python run/cv_train.py epoch=1
 python run/cv_train.py exp_name=exp011 "pos_weight=[1.0, 5.0, 5.0]" 
-```
-
-#### score
-```sh
-# score th
-python run/score.py exp=exp005_0 split=stratify_fold_0 how=threshold # score: 0.6972691106831039, th: 0.0038536733146294715
-python run/score.py exp=exp007_0 split=stratify_fold_0 how=threshold # score: 0.7140820749853363, th: 0.0038536733146294715
-# score distance
-python run/score.py exp=exp005_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7064557388270514, distance: 70
-python run/score.py exp=exp006_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7176154573874453, distance: 64
-python run/score.py exp=exp007_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7199185318854219, distance: 79
-python run/score.py exp=exp008_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7207154455037633, distance: 69
-python run/score.py exp=exp009_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 # score: 0.7103450691338504, distance: 63
-python run/score.py exp=exp010_0 split=stratify_fold_0 how=distance post_process.score_th=0.0038536733146294715 #  score: 0.6744478935205226, distance: 63
-
-python run/score.py exp=exp007_0 split=stratify_fold_0 how=group_by_day 
-python run/score.py exp=exp008_0 split=stratify_fold_0 how=group_by_day # score: 0.6601665731898787
-
-python run/score.py exp=exp007_0 split=stratify_fold_0 how=score score.remove_periodicity=False # 0.7137
-python run/score.py exp=exp007_0 split=stratify_fold_0 how=score  # 0.7170
-
-
-## cv score
 python run/cv_score.py exp=exp011 post_process.remove_periodicity=false # 0.7368
-python run/cv_score.py exp=exp011 post_process.remove_periodicity=true # 0.7493
+python run/cv_score.py exp=exp011 post_process.remove_periodicity=true # 0.7493　→ score: 0.7503
+
+
+python run/cv_train.py exp_name=exp012 "pos_weight=[1.0, 5.0, 5.0]" "features=001"
+python run/cv_score.py exp=exp012 post_process.remove_periodicity=false # 0.7317
+python run/cv_score.py exp=exp012 post_process.remove_periodicity=true # 0.7442 → score: 0.7444
+
+
+python run/cv_train.py exp_name=exp013 "pos_weight=[1.0, 5.0, 5.0]" "features=002"
+python run/cv_train.py exp_name=exp014 "pos_weight=[1.0, 5.0, 5.0]" "features=003"
 ```
