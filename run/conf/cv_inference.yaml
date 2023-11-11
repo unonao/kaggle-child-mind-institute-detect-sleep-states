@@ -15,6 +15,8 @@ defaults:
   - model: Spec2DCNN
   - feature_extractor: CNNSpectrogram
   - decoder: UNet1DDecoder
+  - features: base
+  - post_process: score
 
 num_fold: 5
 
@@ -42,11 +44,6 @@ augmentation:
   cutmix_prob: 0.0
   cutmix_alpha: 0.4
 
-# post_process
-post_process:
-  score_th: 0.001
-  distance: 80
-  remove_periodicity: false
 
 # label
 labels:
@@ -62,9 +59,3 @@ pos_weight:
   - 1.0
   - 1.0
 
-# feature
-features:
-  - "anglez"
-  - "enmo"
-  - "hour_sin"
-  - "hour_cos"

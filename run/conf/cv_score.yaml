@@ -10,6 +10,7 @@ hydra:
 
 defaults:
   - train@_here_
+  - override post_process: score
   - _self_
 
 how: score # score, threshold or distance
@@ -17,10 +18,4 @@ base_dir: /tmp/working/output/cv_train/
 exp: exp001
 
 num_fold: 5
-
-# score
-post_process:
-  score_th: 0.0038536
-  distance: 80
-  remove_periodicity: true
 

@@ -1,6 +1,11 @@
 import numpy as np
 import polars as pl
 from scipy.signal import find_peaks
+import logging
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
+LOGGER = logging.getLogger(Path(__file__).name)
 
 
 def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df: pl.DataFrame) -> pl.DataFrame:
@@ -75,6 +80,8 @@ def post_process_for_seg(
     Returns:
         pl.DataFrame: submission dataframe
     """
+    LOGGER.info("is periodicity_dict None? : {}".format(periodicity_dict is None))
+
     series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
     unique_series_ids = np.unique(series_ids)
 

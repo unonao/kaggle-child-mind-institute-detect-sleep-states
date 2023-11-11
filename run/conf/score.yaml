@@ -10,15 +10,11 @@ hydra:
 
 defaults:
   - train@_here_
+  - override post_process: score
   - _self_
 
 how: score # score, threshold or distance
 base_dir: /tmp/working/output/train/
 exp: exp001
 
-# score
-post_process:
-  score_th: 0.001
-  distance: 80
-  remove_periodicity: true
 

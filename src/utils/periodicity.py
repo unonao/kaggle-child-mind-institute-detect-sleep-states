@@ -1,7 +1,11 @@
 from pathlib import Path
+import logging
 
 import numpy as np
 from omegaconf import DictConfig
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
+LOGGER = logging.getLogger(Path(__file__).name)
 
 
 def downsample(sequence, factor=10):
@@ -18,7 +22,7 @@ def resize_1d_array(array, new_size):
     return np.interp(np.linspace(0, len(array) - 1, new_size), np.arange(len(array)), array)
 
 
-def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: int = 4) -> np.ndarray:
+def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: int = 8, th = 0.99) -> np.ndarray:
     """
     split_hourごとにフレームに分割して、同じ波形が現れたフレームは周期性ありとみなす
 
@@ -47,7 +51,7 @@ def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: 
     norm_vecs = chunks / np.linalg.norm(chunks, axis=1, keepdims=True)
     cosine_sim_matrix = np.dot(norm_vecs, norm_vecs.T)
     cosine_sim_matrix[range(len(cosine_sim_matrix)), range(len(cosine_sim_matrix))] = 0
-    pred_chunk = cosine_sim_matrix.max(axis=0) > 0.99
+    pred_chunk = cosine_sim_matrix.max(axis=0) > th
 
     # 最後の一個前が true なら、最後もtrueにする（最後は0埋めしたのでうまくできていない）
     pred_chunk[-1] = pred_chunk[-2:-1].max()
@@ -60,9 +64,11 @@ def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: 
 def get_periodicity_dict(cfg: DictConfig) -> dict[np.ndarray]:
     phase = cfg.phase if "phase" in cfg else "train"
     feature_dir = Path(cfg.dir.processed_dir) / phase
+    LOGGER.info(f"feature_dir: {feature_dir}")
     series_ids = [x.name for x in feature_dir.glob("*")]
     periodicity_dict = {}
     for series_id in series_ids:
         seq = np.load(feature_dir / series_id / "enmo.npy")
-        periodicity_dict[series_id] = predict_periodicity(seq)
+        periodicity_dict[series_id] = predict_periodicity(seq, cfg.post_process.periodicity.downsample_rate, cfg.post_process.periodicity.split_hour, cfg.post_process.periodicity.th)
+    LOGGER.info(f"series length: {len(series_ids)}")
     return periodicity_dict

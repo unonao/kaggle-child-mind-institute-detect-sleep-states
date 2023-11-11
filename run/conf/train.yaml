@@ -16,6 +16,8 @@ defaults:
   - feature_extractor: CNNSpectrogram
   - decoder: UNet1DDecoder
   - split: fold_0
+  - features: base
+  - post_process: train
 
 seed: 42
 exp_name: dummy
@@ -25,7 +27,7 @@ upsample_rate: 1
 
 # training
 epoch: 50
-batch_size: 64
+batch_size: 32
 num_workers: 8
 accelerator: auto
 use_amp: true
@@ -48,10 +50,6 @@ augmentation:
   cutmix_prob: 0.0
   cutmix_alpha: 0.4
   
-# post_process
-post_process:
-  score_th: 0.02
-  distance: 10
 
 # label
 labels:
@@ -67,16 +65,6 @@ pos_weight:
   - 1.0
   - 1.0
 
-# feature
-features:
-  - "anglez"
-  - "enmo"
-  # - "month_sin"
-  # - "month_cos"
-  - "hour_sin"
-  - "hour_cos"
-  # - "minute_sin"
-  # - "minute_cos"
 
 # optimizer
 optimizer:
