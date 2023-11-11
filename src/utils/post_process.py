@@ -57,7 +57,11 @@ def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df
 
 
 def post_process_for_seg(
-    keys: list[str], preds: np.ndarray, score_th: float = 0.01, distance: int = 5000
+    keys: list[str],
+    preds: np.ndarray,
+    score_th: float = 0.01,
+    distance: int = 5000,
+    periodicity_dict: dict[np.ndarray] | None = None,
 ) -> pl.DataFrame:
     """make submission dataframe for segmentation task
 
@@ -65,6 +69,8 @@ def post_process_for_seg(
         keys (list[str]): list of keys. key is "{series_id}_{chunk_id}"
         preds (np.ndarray): (num_series * num_chunks, duration, 2)
         score_th (float, optional): threshold for score. Defaults to 0.5.
+        distance (int, optional): distance for peaks. Defaults to 5000.
+        periodicity_dict (dict[np.ndarray], optional): series_id を key に periodicity の 1d の予測結果を持つ辞書. 値は 0 or 1 の np.ndarray. Defaults to None.
 
     Returns:
         pl.DataFrame: submission dataframe
@@ -76,6 +82,9 @@ def post_process_for_seg(
     for series_id in unique_series_ids:
         series_idx = np.where(series_ids == series_id)[0]
         this_series_preds = preds[series_idx].reshape(-1, 2)
+        if periodicity_dict is not None:
+            this_series_preds = this_series_preds[: len(periodicity_dict[series_id]), :]
+            this_series_preds[periodicity_dict[series_id] > 0.5] = 0  # periodicity があるところは0にする
 
         for i, event_name in enumerate(["onset", "wakeup"]):
             this_event_preds = this_series_preds[:, i]

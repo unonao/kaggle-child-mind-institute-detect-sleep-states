@@ -1,4 +1,7 @@
+from pathlib import Path
+
 import numpy as np
+from omegaconf import DictConfig
 
 
 def downsample(sequence, factor=10):
@@ -15,7 +18,7 @@ def resize_1d_array(array, new_size):
     return np.interp(np.linspace(0, len(array) - 1, new_size), np.arange(len(array)), array)
 
 
-def predict_periodicity(seq: np.ndarray, downsample_rate: int = 60, split_hour: int = 8) -> np.ndarray:
+def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: int = 4) -> np.ndarray:
     """
     split_hourごとにフレームに分割して、同じ波形が現れたフレームは周期性ありとみなす
 
@@ -49,3 +52,14 @@ def predict_periodicity(seq: np.ndarray, downsample_rate: int = 60, split_hour: 
     # pred_vecを元のsequenceのサイズに戻す
     pred = resize_1d_array(pred_chunk.repeat(split_step)[: len(seq_downsampled)], len(seq))
     return pred
+
+
+def get_periodicity_dict(cfg: DictConfig) -> dict[np.ndarray]:
+    phase = cfg.phase if "phase" in cfg else "train"
+    feature_dir = Path(cfg.dir.processed_dir) / phase
+    series_ids = [x.name for x in feature_dir.glob("*")]
+    periodicity_dict = {}
+    for series_id in series_ids:
+        seq = np.load(feature_dir / series_id / "enmo.npy")
+        periodicity_dict[series_id] = predict_periodicity(seq)
+    return periodicity_dict
