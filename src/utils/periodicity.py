@@ -29,6 +29,9 @@ def predict_periodicity(seq: np.ndarray, downsample_rate: int = 15, split_hour: 
     Returns:
         pred (np.ndarray): 1D array of shape (n,)
     """
+    # 最低限必要な長さがなければ、周期性はないとみなす
+    if len(seq) < 24 * 3600 // 5:
+        return np.zeros(len(seq), dtype=bool)
 
     # seq をダウンサンプリングして seq_downsampled に
     seq_downsampled = downsample(seq, downsample_rate)

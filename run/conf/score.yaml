@@ -12,7 +12,7 @@ defaults:
   - train@_here_
   - _self_
 
-how: threshold # score, threshold or distance
+how: score # score, threshold or distance
 base_dir: /tmp/working/output/train/
 exp: exp001
 
@@ -20,5 +20,5 @@ exp: exp001
 score:
   score_th: 0.001
   distance: 80
-  remove_periodicity: True
+  remove_periodicity: true
 

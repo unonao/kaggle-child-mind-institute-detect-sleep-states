@@ -15,6 +15,7 @@ from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_s
 from src.models.common import get_model
 from src.utils.common import trace
 from src.utils.post_process import post_process_for_seg, post_process_for_seg_group_by_day
+from src.utils.periodicity import get_periodicity_dict
 
 
 def load_model(cfg: DictConfig) -> nn.Module:
@@ -127,11 +128,16 @@ def main(cfg: DictConfig):
 
     with trace("make submission"):
         if cfg.how_post_process == "peaks":
+            periodicity_dict = None
+            if cfg.post_process.remove_periodicity:
+                with trace("get periodicity_dict"):
+                    periodicity_dict = get_periodicity_dict(cfg)
             sub_df = post_process_for_seg(
                 keys,
                 preds[:, :, [1, 2]],
                 score_th=cfg.post_process.score_th,
                 distance=cfg.post_process.distance,
+                periodicity_dict=periodicity_dict,
             )
         elif cfg.how_post_process == "group_by_day":
             test_df = get_test_series(cfg)
@@ -140,6 +146,8 @@ def main(cfg: DictConfig):
                 preds[:, :, [1, 2]],
                 test_df,
             )
+    np.save("keys.npy", np.array(keys))
+    np.save("preds.npy", preds)
     sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
 
 

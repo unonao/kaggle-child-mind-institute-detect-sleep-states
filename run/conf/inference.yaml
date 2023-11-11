@@ -43,6 +43,7 @@ augmentation:
 post_process:
   score_th: 0.02
   distance: 10
+  remove_periodicity: false
 
 # label
 labels:
