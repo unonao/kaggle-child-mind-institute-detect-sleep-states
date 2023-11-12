@@ -14,3 +14,9 @@ defaults:
   - dir: local
 
 phase: train
+
+
+periodicity: 
+  downsample_rate: 12
+  stride_min: 3
+  split_min: 120

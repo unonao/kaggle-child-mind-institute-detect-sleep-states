@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from src.utils.common import trace
+from src.utils.periodicity import predict_periodicity_v2
 
 SERIES_SCHEMA = {
     "series_id": pl.Utf8,
@@ -63,17 +64,21 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     ).with_columns(
         # 100/ (activity_count + 1)      
         (1 / (pl.col("activity_count") + 1)).alias("lids"),
-    ).select("series_id", *FEATURE_NAMES)
+    )
     return series_df
 
 
-def save_each_series(this_series_df: pl.DataFrame, columns: list[str], output_dir: Path):
+def save_each_series(cfg, this_series_df: pl.DataFrame, columns: list[str], output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for col_name in columns:
         x = this_series_df.get_column(col_name).to_numpy(zero_copy_only=True)
         np.save(output_dir / f"{col_name}.npy", x)
 
+    # periodicity
+    seq = this_series_df.get_column("enmo_raw").to_numpy(zero_copy_only=True)
+    periodicity = predict_periodicity_v2(seq, cfg.periodicity.downsample_rate, cfg.periodicity.stride_min, cfg.periodicity.split_min)
+    np.save(output_dir / "periodicity.npy", periodicity)
 
 @hydra.main(config_path="conf", config_name="prepare_data", version_base="1.2")
 def main(cfg: DictConfig):
@@ -122,7 +127,7 @@ def main(cfg: DictConfig):
 
             # 特徴量をそれぞれnpyで保存
             series_dir = processed_dir / series_id  # type: ignore
-            save_each_series(this_series_df, FEATURE_NAMES, series_dir)
+            save_each_series(cfg, this_series_df, FEATURE_NAMES, series_dir)
 
 
 if __name__ == "__main__":

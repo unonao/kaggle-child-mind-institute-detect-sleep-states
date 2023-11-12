@@ -91,7 +91,7 @@ def post_process_for_seg(
         this_series_preds = preds[series_idx].reshape(-1, 2)
         if periodicity_dict is not None:
             this_series_preds = this_series_preds[: len(periodicity_dict[series_id]), :]
-            this_series_preds[periodicity_dict[series_id] > 0.5] = 0  # periodicity があるところは0にする
+            this_series_preds *= (1-periodicity_dict[series_id][:, None])  # periodicity があるところは0にする
 
         for i, event_name in enumerate(["onset", "wakeup"]):
             this_event_preds = this_series_preds[:, i]
