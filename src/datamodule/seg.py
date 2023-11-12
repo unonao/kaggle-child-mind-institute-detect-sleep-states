@@ -186,7 +186,7 @@ class TrainDataset(Dataset):
         n_steps = this_feature.shape[0]
 
         # sample background
-        if random.random() < self.cfg.bg_sampling_rate:
+        if (random.random() < self.cfg.bg_sampling_rate) and (series_id not in self.cfg.ignore.negative):
             pos = negative_sampling(this_event_df, n_steps)
 
         # crop
@@ -317,7 +317,7 @@ class SegDataModule(LightningDataModule):
             self.train_series_ids = self.cfg[f"fold_{fold}"].train_series_ids
             self.valid_series_ids = self.cfg[f"fold_{fold}"].valid_series_ids
 
-        self.train_event_df = self.event_df.filter(pl.col("series_id").is_in(self.train_series_ids))
+        self.train_event_df = self.event_df.filter(pl.col("series_id").is_in(self.train_series_ids)).filter(~pl.col("series_id").is_in(self.cfg.ignore.train))
         self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
 
         # train data

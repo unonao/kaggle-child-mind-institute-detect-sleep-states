@@ -22,6 +22,7 @@ defaults:
   - split@fold_4: stratify_fold_4
   - features: base
   - post_process: train
+  - ignore: zero
 
 num_fold: 5
 

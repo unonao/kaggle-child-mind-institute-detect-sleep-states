@@ -18,6 +18,7 @@ defaults:
   - split: fold_0
   - features: base
   - post_process: train
+  - ignore: zero
 
 seed: 42
 exp_name: dummy
