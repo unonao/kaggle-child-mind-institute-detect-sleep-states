@@ -24,13 +24,21 @@ python run/prepare_data.py phase=test
 #### train
 ```sh
 python run/train.py exp_name=exp007_0 split=stratify_fold_0 batch_size=32 feature_extractor=CNNSpectrogram "pos_weight=[1.0, 5.0, 5.0]"
-python run/cv_train.py exp_name=exp011 "pos_weight=[1.0, 5.0, 5.0]" 
+
+
+python run/cv_train.py exp_name=exp013 "pos_weight=[1.0, 5.0, 5.0]" "features=002" # 0.7393
+python run/cv_score.py exp=exp013 post_process.remove_periodicity=false  # score: 0.7401
+python run/cv_score.py exp=exp013 post_process.remove_periodicity=true #  score: 0.7566
+python run/cv_score.py exp=exp013 post_process.remove_periodicity=true post_process.periodicity.filter_size=10000  #  score: 0.7571
+python -m run.cv_inference exp_name=exp013 model.encoder_weights=null phase=train batch_size=8 "features=002" num_tta=1  # tta=1:0.7400 → 0.7566 tta=2:0.7572→0.7706 tta=3: 0.7614→0.7725 tta=5: 0.7639→0.7741
+
+
 
 ``` 
 
 #### inference
 
 ```sh
-python -m run.inference exp_name=exp007_0 model.encoder_weights=null phase=test post_process.remove_periodicity=true batch_size=8
-python -m run.cv_inference exp_name=exp011 model.encoder_weights=null phase=test post_process.remove_periodicity=true batch_size=8
+python -m run.cv_inference exp_name=exp013 model.encoder_weights=null phase=test post_process.remove_periodicity=true batch_size=8
 ```
+
