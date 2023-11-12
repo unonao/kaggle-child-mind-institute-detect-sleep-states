@@ -60,7 +60,6 @@ def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df
 
     return submission_df
 
-
 def post_process_for_seg(
     keys: list[str],
     preds: np.ndarray,
@@ -122,3 +121,60 @@ def post_process_for_seg(
     row_ids = pl.Series(name="row_id", values=np.arange(len(sub_df)))
     sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
     return sub_df
+
+
+def post_process_find_peaks(
+    series2preds: dict[np.ndarray],
+    score_th: float = 0.01,
+    distance: int = 5000,
+    periodicity_dict: dict[np.ndarray] | None = None,
+) -> pl.DataFrame:
+    """make submission dataframe for segmentation task
+
+    Args:
+        series2preds (dict[np.ndarray]): series_id を key に 2d の予測結果を持つ辞書
+        score_th (float, optional): threshold for score. Defaults to 0.5.
+        distance (int, optional): distance for peaks. Defaults to 5000.
+        periodicity_dict (dict[np.ndarray], optional): series_id を key に periodicity の 1d の予測結果を持つ辞書. 値は 0 or 1 の np.ndarray. Defaults to None.
+
+    Returns:
+        pl.DataFrame: submission dataframe
+    """
+    LOGGER.info("is periodicity_dict None? : {}".format(periodicity_dict is None))
+
+    records = []
+    for series_id in series2preds.keys():
+        this_series_preds = series2preds[series_id][:, [1,2]]
+        if periodicity_dict is not None:
+            this_series_preds = this_series_preds[: len(periodicity_dict[series_id]), :]
+            this_series_preds *= (1-periodicity_dict[series_id][:, None])  # periodicity があるところは0にする
+
+        for i, event_name in enumerate(["onset", "wakeup"]):
+            this_event_preds = this_series_preds[:, i]
+            steps = find_peaks(this_event_preds, height=score_th, distance=distance)[0]
+            scores = this_event_preds[steps]
+            for step, score in zip(steps, scores):
+                records.append(
+                    {
+                        "series_id": series_id,
+                        "step": step,
+                        "event": event_name,
+                        "score": score,
+                    }
+                )
+
+    if len(records) == 0:  # 一つも予測がない場合はdummyを入れる
+        records.append(
+            {
+                "series_id": series_id,
+                "step": 0,
+                "event": "onset",
+                "score": 0,
+            }
+        )
+
+    sub_df = pl.DataFrame(records).sort(by=["series_id", "step"])
+    row_ids = pl.Series(name="row_id", values=np.arange(len(sub_df)))
+    sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
+    return sub_df
+

@@ -17,8 +17,17 @@ defaults:
   - decoder: UNet1DDecoder
   - features: base
   - post_process: score
+  # phase: train 用
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
+
+debug: false
 
 num_fold: 5
+num_tta: 2
 
 exp_name: dummy
 phase: test

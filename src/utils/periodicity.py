@@ -115,7 +115,6 @@ def get_periodicity_dict(cfg: DictConfig) -> dict[np.ndarray]:
     for series_id in series_ids:
         periodicity = np.load(feature_dir / series_id / "periodicity.npy")
         periodicity = np.minimum(periodicity, uniform_filter1d(periodicity, size=cfg.post_process.periodicity.filter_size))
-
         periodicity_dict[series_id] = periodicity
 
         """

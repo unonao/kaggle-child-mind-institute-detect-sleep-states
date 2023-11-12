@@ -44,6 +44,8 @@ def load_chunk_features(
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
+    stride: int = 0, # stride だけずらしてchunkにする
+    debug: bool = False,
 ) -> dict[str, np.ndarray]:
     features = {}
 
@@ -57,10 +59,13 @@ def load_chunk_features(
             this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
         this_feature = np.stack(this_feature, axis=1)
         num_chunks = (len(this_feature) // duration) + 1
+        this_feature = pad_if_needed(this_feature, stride + num_chunks * duration , pad_value=0)
         for i in range(num_chunks):
-            chunk_feature = this_feature[i * duration : (i + 1) * duration]
-            chunk_feature = pad_if_needed(chunk_feature, duration, pad_value=0)  # type: ignore
+            chunk_feature = this_feature[stride + i * duration : stride + (i + 1) * duration]
+            #chunk_feature = pad_if_needed(chunk_feature, duration, pad_value=0)
             features[f"{series_id}_{i:07}"] = chunk_feature
+            if debug:
+                break
 
     return features  # type: ignore
 
