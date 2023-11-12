@@ -20,6 +20,8 @@ SERIES_SCHEMA = {
 FEATURE_NAMES = [
     "anglez",
     "enmo",
+    "anglez_series_norm",
+    "enmo_series_norm",
     "hour_sin",
     "hour_cos",
     "month_sin",
@@ -48,6 +50,10 @@ def to_coord(x: pl.Expr, max_: int, name: str) -> list[pl.Expr]:
 
 def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     series_df = series_df.with_columns(
+        # raw データはシリーズの平均と分散でnormalize
+        ((pl.col("anglez_raw") - pl.col("anglez_raw").mean()) / pl.col("anglez_raw").std()).alias("anglez_series_norm"),
+        ((pl.col("enmo_raw") - pl.col("enmo_raw").mean()) / pl.col("enmo_raw").std()).alias("enmo_series_norm"),
+    ).with_columns(
         *to_coord(pl.col("timestamp").dt.hour(), 24, "hour"),
         *to_coord(pl.col("timestamp").dt.month(), 12, "month"),
         *to_coord(pl.col("timestamp").dt.minute(), 60, "minute"),
@@ -97,16 +103,20 @@ def main(cfg: DictConfig):
         series_df = (
             series_lf.with_columns(
                 pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z"),
+                # 全体の平均・標準偏差から標準化
                 (pl.col("anglez") - ANGLEZ_MEAN) / ANGLEZ_STD,
                 (pl.col("enmo") - ENMO_MEAN) / ENMO_STD,
+                # raw
+                pl.col("anglez").alias("anglez_raw"),
+                pl.col("enmo").alias("enmo_raw"),
             )
-            .select([pl.col("series_id"), pl.col("anglez"), pl.col("enmo"), pl.col("timestamp")])
+            .select([pl.col("series_id"), pl.col("timestamp"), pl.col("anglez"), pl.col("enmo"), pl.col("anglez_raw"), pl.col("enmo_raw")])
             .collect(streaming=True)
             .sort(by=["series_id", "timestamp"])
         )
         n_unique = series_df.get_column("series_id").n_unique()
     with trace("Save features"):
-        for series_id, this_series_df in tqdm(series_df.group_by("series_id"), total=n_unique):
+        for series_id, this_series_df in tqdm(series_df.group_by("series_id"), total=n_unique):          
             # 特徴量を追加
             this_series_df = add_feature(this_series_df)
 
