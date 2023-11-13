@@ -22,14 +22,16 @@ def main(cfg: DictConfig):  # type: ignore
     event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
     distance = cfg.post_process.distance
 
+    fold = cfg.fold
+    event_df = event_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].valid_series_ids))
+
     # 予測結果の読み込み
     exp_dir = Path(os.path.join(cfg.base_dir, cfg.exp_name, "cv"))
 
     keys_list = []
     preds_list = []
-    for fold in range(cfg.num_fold):
-        preds_list.append(np.load(exp_dir / f"preds_fold{fold}.npy"))
-        keys_list.append(np.load(exp_dir / f"keys_fold{fold}.npy"))
+    preds_list.append(np.load(exp_dir / f"preds_fold{fold}.npy"))
+    keys_list.append(np.load(exp_dir / f"keys_fold{fold}.npy"))
     preds = np.concatenate(preds_list, axis=0)
     keys = np.concatenate(keys_list, axis=0)
 

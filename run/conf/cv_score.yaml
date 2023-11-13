@@ -9,13 +9,13 @@ hydra:
     dir: .
 
 defaults:
-  - train@_here_
+  - cv_train@_here_
   - override post_process: score
   - _self_
 
 how: score # score, threshold or distance
 base_dir: /tmp/working/output/cv_train/
-exp: exp001
+exp_name: exp001
 
 num_fold: 5
 
