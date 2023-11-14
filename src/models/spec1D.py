@@ -1,4 +1,5 @@
 from typing import Optional
+from omegaconf import DictConfig
 
 import torch
 import torch.nn as nn
@@ -6,16 +7,19 @@ import torch.nn as nn
 from src.augmentation.cutmix import Cutmix
 from src.augmentation.mixup import Mixup
 
+from src.models.loss.tolerance import ToleranceLoss
+from src.models.loss.tolerance_mse import ToleranceMSELoss
+from src.models.loss.bce import BCEWithLogitsLoss
+
 
 class Spec1D(nn.Module):
     def __init__(
         self,
+        cfg: DictConfig,
         feature_extractor: nn.Module,
         decoder: nn.Module,
         mixup_alpha: float = 0.5,
         cutmix_alpha: float = 0.5,
-        weight: Optional[list[float]] = None,
-        pos_weight: Optional[list[float]] = None,
     ):
         super().__init__()
         self.feature_extractor = feature_extractor
@@ -23,14 +27,26 @@ class Spec1D(nn.Module):
         self.channels_fc = nn.Linear(feature_extractor.out_chans, 1)
         self.mixup = Mixup(mixup_alpha)
         self.cutmix = Cutmix(cutmix_alpha)
-        self.weight = torch.tensor(weight) if weight is not None else None
-        self.pos_weight = torch.tensor(pos_weight) if pos_weight is not None else None
-        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=self.pos_weight)
+        self.loss_weight = torch.tensor(cfg.loss_weight) if "loss_weight" in cfg else None
+        self.label_weight = torch.tensor(cfg.label_weight) if "label_weight" in cfg else None
+        self.pos_weight = torch.tensor(cfg.pos_weight) if "pos_weight" in cfg else None
+
+        if cfg.loss.name == "tolerance":
+            self.loss_fn = ToleranceLoss(
+                loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
+            )
+        elif cfg.loss.name == "tolerance_mse":
+            self.loss_fn = ToleranceMSELoss(
+                loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
+            )
+        else:
+            self.loss_fn = BCEWithLogitsLoss(weight=self.label_weight, pos_weight=self.pos_weight)
 
     def forward(
         self,
         x: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
+        masks: Optional[torch.Tensor] = None,
         do_mixup: bool = False,
         do_cutmix: bool = False,
     ) -> dict[str, torch.Tensor]:
@@ -57,7 +73,7 @@ class Spec1D(nn.Module):
 
         output = {"logits": logits}
         if labels is not None:
-            loss = self.loss_fn(logits, labels)
+            loss = self.loss_fn(logits, labels, masks)
             output["loss"] = loss
 
         return output

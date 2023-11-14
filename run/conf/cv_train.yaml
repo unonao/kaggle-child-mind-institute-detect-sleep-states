@@ -23,6 +23,11 @@ defaults:
   - features: base
   - post_process: train
   - ignore: zero
+  - loss: bce
+
+datamodule:
+  how: random # random, stride
+  train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
 
 num_fold: 5
 

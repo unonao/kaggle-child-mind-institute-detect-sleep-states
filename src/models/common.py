@@ -111,6 +111,7 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
         decoder = get_decoder(cfg, feature_extractor.height, n_classes, num_timesteps)
         model = Spec2DCNN(
+            cfg=cfg,
             feature_extractor=feature_extractor,
             decoder=decoder,
             encoder_name=cfg.model.encoder_name,
@@ -118,19 +119,16 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             encoder_weights=cfg.model.encoder_weights,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
-            weight=cfg.label_weight if "label_weight" in cfg else None,
-            pos_weight=cfg.pos_weight if "pos_weight" in cfg else None,
         )
     elif cfg.model.name == "Spec1D":
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
         decoder = get_decoder(cfg, feature_extractor.height, n_classes, num_timesteps)
         model = Spec1D(
+            cfg=cfg,
             feature_extractor=feature_extractor,
             decoder=decoder,
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
-            weight=cfg.label_weight if "label_weight" in cfg else None,
-            pos_weight=cfg.pos_weight if "pos_weight" in cfg else None,
         )
     else:
         raise NotImplementedError

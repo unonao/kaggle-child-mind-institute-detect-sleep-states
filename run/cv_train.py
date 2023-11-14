@@ -17,6 +17,7 @@ import wandb
 import gc
 
 from src.datamodule.seg import SegDataModule
+from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
 from src.modelmodule.seg import SegModel
 from src.utils.metrics import event_detection_ap
 
@@ -36,7 +37,10 @@ def main(cfg: DictConfig):  # type: ignore
     for fold in range(cfg.num_fold):
         LOGGER.info(f"Start Training Fold {fold}")
         # init lightning model
-        datamodule = SegDataModule(cfg, fold)
+        if cfg.datamodule.how == "random":
+            datamodule = SegDataModule(cfg, fold)
+        elif cfg.datamodule.how == "stride":
+            datamodule = SegDataModuleStride(cfg, fold)
         LOGGER.info("Set Up DataModule")
         model = SegModel(cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration, fold)
 

@@ -57,7 +57,7 @@ class SegModel(LightningModule):
             do_mixup = False
             do_cutmix = False
 
-        output = self.model(batch["feature"], batch["label"], do_mixup, do_cutmix)
+        output = self.model(batch["feature"], batch["label"], batch["masks"], do_mixup, do_cutmix)
         loss: torch.Tensor = output["loss"]
         logits = output["logits"]  # (batch_size, n_timesteps, n_classes)
 
