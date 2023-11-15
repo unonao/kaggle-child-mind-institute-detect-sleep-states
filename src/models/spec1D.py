@@ -10,6 +10,7 @@ from src.augmentation.mixup import Mixup
 from src.models.loss.tolerance import ToleranceLoss
 from src.models.loss.tolerance_mse import ToleranceMSELoss
 from src.models.loss.bce import BCEWithLogitsLoss
+from src.models.loss.tolerance_nonzero import ToleranceNonZeroLoss
 
 
 class Spec1D(nn.Module):
@@ -27,7 +28,7 @@ class Spec1D(nn.Module):
         self.channels_fc = nn.Linear(feature_extractor.out_chans, 1)
         self.mixup = Mixup(mixup_alpha)
         self.cutmix = Cutmix(cutmix_alpha)
-        self.loss_weight = torch.tensor(cfg.loss_weight) if "loss_weight" in cfg else None
+        self.loss_weight = torch.tensor(cfg.loss.loss_weight) if "loss_weight" in cfg.loss else None
         self.label_weight = torch.tensor(cfg.label_weight) if "label_weight" in cfg else None
         self.pos_weight = torch.tensor(cfg.pos_weight) if "pos_weight" in cfg else None
 
@@ -37,6 +38,10 @@ class Spec1D(nn.Module):
             )
         elif cfg.loss.name == "tolerance_mse":
             self.loss_fn = ToleranceMSELoss(
+                loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
+            )
+        elif cfg.loss.name == "tolerance_nonzero":
+            self.loss_fn = ToleranceNonZeroLoss(
                 loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
             )
         else:

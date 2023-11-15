@@ -11,6 +11,9 @@ from src.augmentation.mixup import Mixup
 from src.models.loss.tolerance import ToleranceLoss
 from src.models.loss.tolerance_mse import ToleranceMSELoss
 from src.models.loss.bce import BCEWithLogitsLoss
+from src.models.loss.tolerance_nonzero import ToleranceNonZeroLoss
+from src.models.loss.focal import FocalLoss
+from src.models.loss.focal_bce import FocalBCELoss
 
 
 class Spec2DCNN(nn.Module):
@@ -36,7 +39,7 @@ class Spec2DCNN(nn.Module):
         self.decoder = decoder
         self.mixup = Mixup(mixup_alpha)
         self.cutmix = Cutmix(cutmix_alpha)
-        self.loss_weight = torch.tensor(cfg.loss_weight) if "loss_weight" in cfg else None
+        self.loss_weight = torch.tensor(cfg.loss.loss_weight) if "loss_weight" in cfg.loss else None
         self.label_weight = torch.tensor(cfg.label_weight) if "label_weight" in cfg else None
         self.pos_weight = torch.tensor(cfg.pos_weight) if "pos_weight" in cfg else None
 
@@ -47,6 +50,21 @@ class Spec2DCNN(nn.Module):
         elif cfg.loss.name == "tolerance_mse":
             self.loss_fn = ToleranceMSELoss(
                 loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
+            )
+        elif cfg.loss.name == "tolerance_nonzero":
+            self.loss_fn = ToleranceNonZeroLoss(
+                loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
+            )
+        elif cfg.loss.name == "focal":
+            self.loss_fn = FocalLoss(
+                alpha=cfg.loss.alpha,
+                gamma=cfg.loss.gamma,
+            )
+        elif cfg.loss.name == "focal_bce":
+            self.loss_fn = FocalBCELoss(
+                alpha=cfg.loss.alpha,
+                gamma=cfg.loss.gamma,
+                weight=torch.tensor(cfg.loss.weight),
             )
         else:
             self.loss_fn = BCEWithLogitsLoss(weight=self.label_weight, pos_weight=self.pos_weight)

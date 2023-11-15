@@ -60,6 +60,7 @@ def post_process_for_seg_group_by_day(keys: list[str], preds: np.ndarray, val_df
 
     return submission_df
 
+
 def post_process_for_seg(
     keys: list[str],
     preds: np.ndarray,
@@ -90,7 +91,7 @@ def post_process_for_seg(
         this_series_preds = preds[series_idx].reshape(-1, 2)
         if periodicity_dict is not None:
             this_series_preds = this_series_preds[: len(periodicity_dict[series_id]), :]
-            this_series_preds *= (1-periodicity_dict[series_id][:, None])  # periodicity があるところは0にする
+            this_series_preds *= 1 - periodicity_dict[series_id][:, None]  # periodicity があるところは0にする
 
         for i, event_name in enumerate(["onset", "wakeup"]):
             this_event_preds = this_series_preds[:, i]
@@ -144,10 +145,10 @@ def post_process_find_peaks(
 
     records = []
     for series_id in series2preds.keys():
-        this_series_preds = series2preds[series_id][:, [1,2]]
+        this_series_preds = series2preds[series_id][:, [1, 2]]
         if periodicity_dict is not None:
             this_series_preds = this_series_preds[: len(periodicity_dict[series_id]), :]
-            this_series_preds *= (1-periodicity_dict[series_id][:, None])  # periodicity があるところは0にする
+            this_series_preds *= 1 - periodicity_dict[series_id][:, None]  # periodicity があるところは0にする
 
         for i, event_name in enumerate(["onset", "wakeup"]):
             this_event_preds = this_series_preds[:, i]
@@ -178,3 +179,80 @@ def post_process_find_peaks(
     sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
     return sub_df
 
+
+def post_process_event_score_normalize_by_day(
+    event_df: pl.DataFrame,
+    series_df: pl.DataFrame,
+    day_start_hour_dict: dict[str, int] = {"onset": 12, "wakeup": 20},
+) -> pl.DataFrame:
+    """event score を日毎に正規化する。height以上のスコアを持つイベント農地日毎のscoreの合計を1にする
+
+    Args:
+        event_df (pl.DataFrame): event score を持つ dataframe
+        day_start_hour (dict[str, int], optional): 日付の切り替え時間
+        height (float, optional): event score の高さの閾値
+
+    Returns:
+        pl.DataFrame: 正規化された event score を持つ dataframe
+    """
+
+    # event_df の step カラムの型を u32 に
+    event_df = event_df.with_columns(pl.col("step").cast(pl.UInt32))
+
+    # event_df, series_df の series_id, step  を key に、event_df に series_id の timestamp カラムを結合
+    event_df = event_df.join(series_df.select(["series_id", "step", "timestamp"]), on=["series_id", "step"])
+
+    result_event_df_list = []
+
+    for event, day_start_hour in day_start_hour_dict.items():
+        # event が一致する行を抽出
+        one_event_df = event_df.filter(pl.col("event") == event)
+        # 日付ごとに day_start_hour だけ時間を引いて、日付カラムを追加
+        one_event_df = one_event_df.with_columns(
+            pl.col("timestamp").dt.offset_by(f"-{day_start_hour}h").alias("shifted_timestamp")
+        ).with_columns(pl.col("shifted_timestamp").dt.date().alias("date"))
+
+        #  score の合計をスコアの正規化に用いる
+        score_sum_df = (
+            one_event_df.group_by(["series_id", "date"])
+            .agg(pl.sum("score").alias("score_sum"))
+            .select(["series_id", "date", "score_sum"])
+        )
+        # 日付ごとの score の合計を event_df に結合
+        one_event_df = one_event_df.join(score_sum_df, on=["series_id", "date"])
+        # score_sum が欠損している場合は 1 にする
+        one_event_df = one_event_df.with_columns(
+            pl.when(pl.col("score_sum").is_null()).then(1.0).otherwise(pl.col("score_sum")).alias("score_sum")
+        )
+        # score_sum が 1 未満の場合は 1 にする（大きくはしない）
+        one_event_df = one_event_df.with_columns(
+            pl.when(pl.col("score_sum") < 1).then(1.0).otherwise(pl.col("score_sum")).alias("score_sum")
+        )
+
+        one_event_df = one_event_df.with_columns(
+            pl.when(pl.col("score_sum") > 3.0).then(pl.col("score")).otherwise(pl.col("score") * 0.8).alias("score")
+        )
+        """
+        # 日付ごとの score の合計でスコアを割ると割りすぎなので、power(score_sum) で減衰させる
+        # 0.7395099476450617
+        one_event_df = one_event_df.with_columns(
+            pl.col("score").pow(pl.col("score_sum").alias("score"))
+        ) 
+        """
+        """
+        # 日付ごとの score の合計でスコアを割る
+        one_event_df = one_event_df.with_columns(
+            pl.col("score") / pl.col("score_sum").pow(1.0).alias("score")
+        )  # 0.5: 0.7361688492242824, 1.0: 0.7177877757639883,  2.0: 0.6715313626079408
+        """
+
+        # 日付カラムを削除
+        one_event_df = one_event_df.drop(["shifted_timestamp", "date", "score_sum"])
+
+        # event 結合
+        result_event_df_list.append(one_event_df)
+
+    # event を結合
+    result_event_df = pl.concat(result_event_df_list)
+
+    return result_event_df
