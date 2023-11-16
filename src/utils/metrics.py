@@ -76,7 +76,8 @@ def event_detection_ap(
     solution: pd.DataFrame,
     submission: pd.DataFrame,
     tolerances: Dict[str, List[float]] = tolerances,  # type: ignore
-) -> float:
+    with_table: bool = False,
+) -> float | Tuple[float, pd.DataFrame]:
     # Ensure solution and submission are sorted properly
     solution = solution.sort_values([series_id_column_name, time_column_name])
     submission = submission.sort_values([series_id_column_name, time_column_name])
@@ -156,7 +157,7 @@ def event_detection_ap(
         detections_matched.query("event in @event_classes")  # type: ignore
         .groupby([event_column_name, "tolerance"])
         .apply(
-            lambda group: average_precision_score(
+            lambda group: average_precision_score_with(
                 group["matched"].to_numpy(),
                 group[score_column_name].to_numpy(),
                 class_counts[group[event_column_name].iat[0]],
@@ -164,9 +165,12 @@ def event_detection_ap(
         )
     )
     # Average over tolerances, then over event classes
-    mean_ap = ap_table.groupby(event_column_name).mean().sum() / len(event_classes)
+    mean_ap = ap_table.groupby(event_column_name)["ap"].mean().sum() / len(event_classes)
 
-    return mean_ap
+    if with_table:
+        return mean_ap, ap_table
+    else:
+        return mean_ap
 
 
 def find_nearest_time_idx(times, target_time, excluded_indices, tolerance):
@@ -243,3 +247,11 @@ def average_precision_score(matches: np.ndarray, scores: np.ndarray, p: int) -> 
     precision, recall, _ = precision_recall_curve(matches, scores, p)
     # Compute step integral
     return -np.sum(np.diff(recall) * np.array(precision)[:-1])
+
+
+def average_precision_score_with(matches: np.ndarray, scores: np.ndarray, p: int) -> float:
+    precision, recall, _ = precision_recall_curve(matches, scores, p)
+    # Compute step integral
+    return pd.Series(
+        {"ap": -np.sum(np.diff(recall) * np.array(precision)[:-1]), "precision": precision, "recall": recall}
+    )
