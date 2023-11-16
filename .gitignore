@@ -12,6 +12,7 @@
 /.jupyter
 /.cupy
 .netrc
+/notebook/wandb
 .bash_history
 
 # Byte-compiled / optimized / DLL files
