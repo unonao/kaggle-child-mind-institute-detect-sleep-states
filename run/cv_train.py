@@ -2,6 +2,9 @@ import logging
 from pathlib import Path
 import polars as pl
 
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
 import hydra
 import torch
 from omegaconf import DictConfig
@@ -111,10 +114,27 @@ def main(cfg: DictConfig):  # type: ignore
 
     # 評価
     LOGGER.info("Start event_detection_ap")
-    score = event_detection_ap(
+    score, ap_table = event_detection_ap(
         train_event_df.to_pandas(),
         oof_event_df.to_pandas(),
+        with_table=True,
     )
+
+    wandb.log({"ap_table": wandb.Table(dataframe=ap_table.reset_index()[["event", "tolerance", "ap"]])})
+
+    for event in ["onset", "wakeup"]:
+        plt.figure(figsize=(10, 10))
+        for (event_key, tolerance), group in ap_table[ap_table.index.get_level_values("event") == event].iterrows():
+            plt.plot(
+                group["recall"][:-1], group["precision"][:-1], label=f'Tolerance: {tolerance}, AP:{group["ap"]:.3f}'
+            )
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.title(f"PR Curves for {event}")
+        plt.legend()
+        # 図をwandbにログとして保存
+        wandb.log({f"pr_curve_{event}": wandb.Image(plt)})
+        plt.close()
 
     LOGGER.info(f"OOF score: {score}")
     wandb.log({"cv_score": score})
