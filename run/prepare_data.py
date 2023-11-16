@@ -29,6 +29,8 @@ FEATURE_NAMES = [
     "month_cos",
     "minute_sin",
     "minute_cos",
+    "minute15_sin",
+    "minute15_cos",
     "weekday_sin",
     "weekday_cos",
     "activity_count",
@@ -50,20 +52,31 @@ def to_coord(x: pl.Expr, max_: int, name: str) -> list[pl.Expr]:
 
 
 def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
-    series_df = series_df.with_columns(
-        # raw データはシリーズの平均と分散でnormalize
-        ((pl.col("anglez_raw") - pl.col("anglez_raw").mean()) / pl.col("anglez_raw").std()).alias("anglez_series_norm"),
-        ((pl.col("enmo_raw") - pl.col("enmo_raw").mean()) / pl.col("enmo_raw").std()).alias("enmo_series_norm"),
-    ).with_columns(
-        *to_coord(pl.col("timestamp").dt.hour(), 24, "hour"),
-        *to_coord(pl.col("timestamp").dt.month(), 12, "month"),
-        *to_coord(pl.col("timestamp").dt.minute(), 60, "minute"),
-        *to_coord(pl.col("timestamp").dt.weekday(), 7, "weekday"),
-        # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
-        pl.col("enmo").map_batches(lambda x: np.maximum(x - 0.02, 0)).rolling_sum(10 * 60 // 5, center=True, min_periods=1).rolling_mean(30 * 60 // 5, center=True, min_periods=1).alias("activity_count"),
-    ).with_columns(
-        # 100/ (activity_count + 1)      
-        (1 / (pl.col("activity_count") + 1)).alias("lids"),
+    series_df = (
+        series_df.with_columns(
+            # raw データはシリーズの平均と分散でnormalize
+            ((pl.col("anglez_raw") - pl.col("anglez_raw").mean()) / pl.col("anglez_raw").std()).alias(
+                "anglez_series_norm"
+            ),
+            ((pl.col("enmo_raw") - pl.col("enmo_raw").mean()) / pl.col("enmo_raw").std()).alias("enmo_series_norm"),
+        )
+        .with_columns(
+            *to_coord(pl.col("timestamp").dt.hour(), 24, "hour"),
+            *to_coord(pl.col("timestamp").dt.month(), 12, "month"),
+            *to_coord(pl.col("timestamp").dt.minute(), 60, "minute"),
+            *to_coord(pl.col("timestamp").dt.minute() % 15, 15, "minute15"),
+            *to_coord(pl.col("timestamp").dt.weekday(), 7, "weekday"),
+            # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
+            pl.col("enmo")
+            .map_batches(lambda x: np.maximum(x - 0.02, 0))
+            .rolling_sum(10 * 60 // 5, center=True, min_periods=1)
+            .rolling_mean(30 * 60 // 5, center=True, min_periods=1)
+            .alias("activity_count"),
+        )
+        .with_columns(
+            # 100/ (activity_count + 1)
+            (1 / (pl.col("activity_count") + 1)).alias("lids"),
+        )
     )
     return series_df
 
@@ -77,8 +90,11 @@ def save_each_series(cfg, this_series_df: pl.DataFrame, columns: list[str], outp
 
     # periodicity
     seq = this_series_df.get_column("enmo_raw").to_numpy(zero_copy_only=True)
-    periodicity = predict_periodicity_v2(seq, cfg.periodicity.downsample_rate, cfg.periodicity.stride_min, cfg.periodicity.split_min)
+    periodicity = predict_periodicity_v2(
+        seq, cfg.periodicity.downsample_rate, cfg.periodicity.stride_min, cfg.periodicity.split_min
+    )
     np.save(output_dir / "periodicity.npy", periodicity)
+
 
 @hydra.main(config_path="conf", config_name="prepare_data", version_base="1.2")
 def main(cfg: DictConfig):
@@ -115,13 +131,22 @@ def main(cfg: DictConfig):
                 pl.col("anglez").alias("anglez_raw"),
                 pl.col("enmo").alias("enmo_raw"),
             )
-            .select([pl.col("series_id"), pl.col("timestamp"), pl.col("anglez"), pl.col("enmo"), pl.col("anglez_raw"), pl.col("enmo_raw")])
+            .select(
+                [
+                    pl.col("series_id"),
+                    pl.col("timestamp"),
+                    pl.col("anglez"),
+                    pl.col("enmo"),
+                    pl.col("anglez_raw"),
+                    pl.col("enmo_raw"),
+                ]
+            )
             .collect(streaming=True)
             .sort(by=["series_id", "timestamp"])
         )
         n_unique = series_df.get_column("series_id").n_unique()
     with trace("Save features"):
-        for series_id, this_series_df in tqdm(series_df.group_by("series_id"), total=n_unique):          
+        for series_id, this_series_df in tqdm(series_df.group_by("series_id"), total=n_unique):
             # 特徴量を追加
             this_series_df = add_feature(this_series_df)
 
