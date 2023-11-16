@@ -54,6 +54,8 @@ check_val_every_n_epoch: 1
 offset: 10
 sigma: 10
 bg_sampling_rate: 0.5
+sigma_decay:  # 0.95
+sleep_decay: # 0.90
 
 # augmentation
 augmentation:

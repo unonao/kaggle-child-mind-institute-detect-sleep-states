@@ -45,7 +45,9 @@ def main(cfg: DictConfig):  # type: ignore
         elif cfg.datamodule.how == "stride":
             datamodule = SegDataModuleStride(cfg, fold)
         LOGGER.info("Set Up DataModule")
-        model = SegModel(cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration, fold)
+        model = SegModel(
+            cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration, datamodule, fold
+        )
 
         # set callbacks
         checkpoint_cb = ModelCheckpoint(
@@ -76,6 +78,7 @@ def main(cfg: DictConfig):  # type: ignore
             # resume_from_checkpoint=resume_from,
             num_sanity_val_steps=0,
             log_every_n_steps=int(len(datamodule.train_dataloader()) * 0.1),
+            reload_dataloaders_every_n_epochs=1,
             sync_batchnorm=True,
             check_val_every_n_epoch=cfg.check_val_every_n_epoch,
         )

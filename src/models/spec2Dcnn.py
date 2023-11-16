@@ -29,6 +29,7 @@ class Spec2DCNN(nn.Module):
         cutmix_alpha: float = 0.5,
     ):
         super().__init__()
+        self.cfg = cfg
         self.feature_extractor = feature_extractor
         self.encoder = smp.Unet(
             encoder_name=encoder_name,
@@ -42,32 +43,38 @@ class Spec2DCNN(nn.Module):
         self.loss_weight = torch.tensor(cfg.loss.loss_weight) if "loss_weight" in cfg.loss else None
         self.label_weight = torch.tensor(cfg.label_weight) if "label_weight" in cfg else None
         self.pos_weight = torch.tensor(cfg.pos_weight) if "pos_weight" in cfg else None
+        self.loss_fn = None
+        self.update_loss_fn()
 
-        if cfg.loss.name == "tolerance":
+    def update_loss_fn(self, sleep_decay: float = 1.0) -> None:
+        self.label_weight[0] = self.label_weight[0] * sleep_decay
+        if self.cfg.loss.name == "tolerance":
             self.loss_fn = ToleranceLoss(
                 loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
             )
-        elif cfg.loss.name == "tolerance_mse":
+        elif self.cfg.loss.name == "tolerance_mse":
             self.loss_fn = ToleranceMSELoss(
                 loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
             )
-        elif cfg.loss.name == "tolerance_nonzero":
+        elif self.cfg.loss.name == "tolerance_nonzero":
             self.loss_fn = ToleranceNonZeroLoss(
                 loss_weight=self.loss_weight, label_weight=self.label_weight, pos_weight=self.pos_weight
             )
-        elif cfg.loss.name == "focal":
+        elif self.cfg.loss.name == "focal":
             self.loss_fn = FocalLoss(
-                alpha=cfg.loss.alpha,
-                gamma=cfg.loss.gamma,
+                alpha=self.cfg.loss.alpha,
+                gamma=self.cfg.loss.gamma,
             )
-        elif cfg.loss.name == "focal_bce":
+        elif self.cfg.loss.name == "focal_bce":
             self.loss_fn = FocalBCELoss(
-                alpha=cfg.loss.alpha,
-                gamma=cfg.loss.gamma,
-                weight=torch.tensor(cfg.loss.weight),
+                alpha=self.cfg.loss.alpha,
+                gamma=self.cfg.loss.gamma,
+                weight=torch.tensor(self.cfg.loss.weight),
             )
         else:
             self.loss_fn = BCEWithLogitsLoss(weight=self.label_weight, pos_weight=self.pos_weight)
+
+        self.loss_fn = self.loss_fn.cuda()
 
     def forward(
         self,

@@ -194,6 +194,11 @@ class TrainDataset(Dataset):
             int(self.cfg.duration * self.cfg.upsample_rate), self.cfg.downsample_rate
         )
 
+        self.sigma = self.cfg.sigma
+
+    def set_sigma(self, sigma):
+        self.sigma = sigma
+
     def __len__(self):
         return len(self.event_df)
 
@@ -227,7 +232,7 @@ class TrainDataset(Dataset):
         num_frames = self.upsampled_num_frames // self.cfg.downsample_rate
         label, masks = get_label(this_event_df, num_frames, self.cfg.duration, start, end)
         label[:, [1, 2]] = gaussian_label(
-            label[:, [1, 2]], offset=self.cfg.offset, sigma=self.cfg.sigma
+            label[:, [1, 2]], offset=self.cfg.offset, sigma=self.sigma
         )  # onset, wakeup のみハードラベルなのでガウシアンラベルに変換
 
         return {
@@ -362,6 +367,10 @@ class SegDataModule(LightningDataModule):
             processed_dir=self.processed_dir,
             phase="train",
         )
+        self.sigma = cfg.sigma
+
+    def set_sigma(self, sigma):
+        self.sigma = sigma
 
     def train_dataloader(self):
         train_dataset = TrainDataset(
@@ -369,6 +378,8 @@ class SegDataModule(LightningDataModule):
             event_df=self.train_event_df,
             features=self.train_features,
         )
+        train_dataset.set_sigma(self.sigma)
+        print(f"sigma: {self.sigma}")
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.cfg.batch_size,

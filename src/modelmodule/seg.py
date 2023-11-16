@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningModule
 from torchvision.transforms.functional import resize
 from transformers import get_cosine_schedule_with_warmup
+import torch.nn as nn
 
 from src.datamodule.seg import nearest_valid_size
 from src.models.common import get_model
@@ -23,6 +24,7 @@ class SegModel(LightningModule):
         feature_dim: int,
         num_classes: int,
         duration: int,
+        datamodule=None,
         fold: int | None = None,
     ):
         super().__init__()
@@ -39,6 +41,9 @@ class SegModel(LightningModule):
         self.postfix = f"_fold{fold}" if fold is not None else ""
         self.validation_step_outputs: list = []
         self.__best_loss = np.inf
+        self.__best_score = 0.0
+        self.datamodule = datamodule
+        self.epoch = 0
 
     def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> dict[str, Optional[torch.Tensor]]:
         return self.model(x, labels)
@@ -101,6 +106,12 @@ class SegModel(LightningModule):
 
         return loss
 
+    def on_train_epoch_end(self):
+        if (self.cfg.sigma_decay is not None) and (self.datamodule is not None):
+            self.datamodule.set_sigma(self.datamodule.sigma * self.cfg.sigma_decay)
+        if self.cfg.sleep_decay is not None:
+            self.model.update_loss_fn(self.cfg.sleep_decay)
+
     def on_validation_epoch_end(self):
         keys = []
         for x in self.validation_step_outputs:
@@ -119,13 +130,17 @@ class SegModel(LightningModule):
         score = event_detection_ap(self.val_event_df.to_pandas(), val_pred_df.to_pandas())
         self.log(f"val_score{self.postfix}", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)
 
-        if loss < self.__best_loss:
+        if ((self.cfg.monitor == "val_score") and (score > self.__best_score)) or (
+            (self.cfg.monitor == "val_loss") and (loss < self.__best_loss)
+        ):
             np.save(f"keys{self.postfix}.npy", np.array(keys))
             np.save(f"labels{self.postfix}.npy", labels)
             np.save(f"preds{self.postfix}.npy", preds)
             val_pred_df.write_csv(f"val_pred_df{self.postfix}.csv")
             torch.save(self.model.state_dict(), f"best_model{self.postfix}.pth")
+            print(f"Saved best model {self.__best_score} -> {score}")
             print(f"Saved best model {self.__best_loss} -> {loss}")
+            self.__best_score = score
             self.__best_loss = loss
 
         self.validation_step_outputs.clear()

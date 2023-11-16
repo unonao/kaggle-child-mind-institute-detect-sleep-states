@@ -18,6 +18,10 @@ SERIES_SCHEMA = {
 }
 
 
+rolling_std_steps = [12, 60, 120, 360]
+base_cols = ["enmo", "anglez"]
+
+
 FEATURE_NAMES = [
     "anglez",
     "enmo",
@@ -35,7 +39,7 @@ FEATURE_NAMES = [
     "weekday_cos",
     "activity_count",
     "lids",
-]
+] + [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
 
 ANGLEZ_MEAN = -8.810476
 ANGLEZ_STD = 35.521877
@@ -66,6 +70,34 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             *to_coord(pl.col("timestamp").dt.minute(), 60, "minute"),
             *to_coord(pl.col("timestamp").dt.minute() % 15, 15, "minute15"),
             *to_coord(pl.col("timestamp").dt.weekday(), 7, "weekday"),
+        )
+        .with_columns(
+            # 指定区間左側のstd。null は 0 で埋める
+            [
+                pl.col(col).rolling_std(step, center=False).fill_null(0).alias(f"{col}_std_left{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+        .with_columns(
+            # left をずらして right を作る
+            [
+                pl.col(f"{col}_std_left{step}")
+                .shift_and_fill(periods=-(step - 1), fill_value=0)
+                .alias(f"{col}_std_right{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+        .with_columns(
+            # left と right の差分
+            [
+                (pl.col(f"{col}_std_right{step}") - pl.col(f"{col}_std_left{step}")).alias(f"{col}_std_diff{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+        .with_columns(
             # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
             pl.col("enmo")
             .map_batches(lambda x: np.maximum(x - 0.02, 0))
