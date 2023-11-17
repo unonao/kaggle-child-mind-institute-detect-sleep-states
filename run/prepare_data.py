@@ -25,6 +25,8 @@ base_cols = ["enmo", "anglez"]
 FEATURE_NAMES = [
     "anglez",
     "enmo",
+    "anglez_diff",
+    "enmo_diff",
     "anglez_series_norm",
     "enmo_series_norm",
     "hour_sin",
@@ -96,6 +98,11 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
                 for step in rolling_std_steps
                 for col in base_cols
             ]
+        )
+        .with_columns(
+            # 一つとなりとの差分
+            pl.col("anglez").diff().fill_null(0).alias("anglez_diff"),
+            pl.col("enmo").diff().fill_null(0).alias("enmo_diff"),
         )
         .with_columns(
             # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
