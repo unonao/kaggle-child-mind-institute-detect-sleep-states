@@ -67,12 +67,30 @@ python run/cv_train.py exp_name=exp027 "features=002" loss=focal_bce "loss.weigh
 python run/cv_train.py exp_name=exp028 "features=002" loss=focal_bce "loss.weight=[0.0, 10.0]" loss.gamma=1.5
 
 
+python run/cv_train.py exp_name=exp030_tolerance_loss "pos_weight=[1.0, 5.0, 5.0]" "features=007" loss=tolerance
 
-# python run/cv_train.py exp_name=exp029 "pos_weight=[1.0, 5.0, 5.0]" "features=006" # 0.7393　→　?
-python run/cv_train.py exp_name=exp029 "pos_weight=[1.0, 5.0, 5.0]" "features=007" # 0.7393　→　?
-python run/cv_score.py exp_name=exp029 post_process.remove_periodicity=true # 0.7599
-python -m run.cv_inference exp_name=exp029 model.encoder_weights=null phase=train batch_size=8 "features=007" num_tta=2 # 2:0.7615→0.7728, 5:0.7668→0.7765
+python run/cv_train.py exp_name=exp031_std_diff "pos_weight=[1.0, 5.0, 5.0]" "features=008" #
+
+python run/cv_train.py exp_name=exp032_sigma_decay "pos_weight=[1.0, 5.0, 5.0]" "features=007" sigma_decay=0.95
+python run/cv_train.py exp_name=exp033_sleep_decay "pos_weight=[1.0, 5.0, 5.0]" "features=007" sleep_decay=0.90
+python run/cv_train.py exp_name=exp034_sleep_decay "pos_weight=[1.0, 20.0, 20.0]" "features=007" sleep_decay=0.95 monitor=val_score monitor_mode=max
+
+python run/cv_train.py exp_name=exp035 "pos_weight=[1.0, 5.0, 5.0]" "features=007" optimizer.lr=0.002
+
+python run/cv_train.py exp_name=exp036 "pos_weight=[1.0, 5.0, 5.0]" "features=007" optimizer.lr=0.001 batch_size=16
+
+python run/cv_train.py exp_name=exp037 "pos_weight=[1.0, 5.0, 5.0]" "features=007" downsample_rate=3
+python run/cv_train.py exp_name=exp038_recall "pos_weight=[1.0, 20.0, 20.0]" "features=007"
+
+python run/cv_train.py exp_name=exp039 "pos_weight=[1.0, 5.0, 5.0]" "features=007" downsample_rate=1
+
+python run/cv_train.py exp_name=exp040 "pos_weight=[1.0, 5.0, 5.0]" "features=009"
+
+python run/cv_train.py exp_name=exp041 "pos_weight=[1.0, 5.0, 5.0]" duration=11520 "features=007"
 
 
-python run/cv_train.py exp_name=exp020 "pos_weight=[1.0, 5.0, 5.0]" "features=002" loss=tolerance
+python run/cv_train.py exp_name=exp042 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" "datamodule.how=2day" model=Spec2DCNN2Day epoch=20
+
+python run/cv_train.py exp_name=exp043 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" "datamodule.how=2day" model=Spec2DCNN2DayV2 epoch=15 monitor=val_score monitor_mode=max
+python run/cv_score_one.py +fold=1 exp_name=exp029 post_process.remove_periodicity=true
 ```
