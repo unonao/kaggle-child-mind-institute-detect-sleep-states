@@ -21,6 +21,7 @@ import gc
 
 from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
+from src.datamodule.seg2day import SegDataModule as SegDataModule2Day
 from src.modelmodule.seg import SegModel
 from src.utils.metrics import event_detection_ap
 
@@ -44,6 +45,9 @@ def main(cfg: DictConfig):  # type: ignore
             datamodule = SegDataModule(cfg, fold)
         elif cfg.datamodule.how == "stride":
             datamodule = SegDataModuleStride(cfg, fold)
+        elif cfg.datamodule.how == "2day":
+            datamodule = SegDataModule2Day(cfg, fold)
+
         LOGGER.info("Set Up DataModule")
         model = SegModel(
             cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration, datamodule, fold
@@ -84,7 +88,7 @@ def main(cfg: DictConfig):  # type: ignore
         )
 
         trainer.fit(model, datamodule=datamodule)
-
+        """
         # load best weights
         model = model.load_from_checkpoint(
             checkpoint_cb.best_model_path,
@@ -97,6 +101,7 @@ def main(cfg: DictConfig):  # type: ignore
         weights_path = str(f"model_weights_fold{fold}.pth")
         LOGGER.info(f"Extracting and saving best weights: {weights_path}")
         torch.save(model.model.state_dict(), weights_path)
+        """
 
         del model
         del trainer
