@@ -103,6 +103,7 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             # 一つとなりとの差分
             pl.col("anglez").diff().fill_null(0).alias("anglez_diff"),
             pl.col("enmo").diff().fill_null(0).alias("enmo_diff"),
+            pl.col("anglez").diff(1).abs().alias("anglez_abs_diff"),
         )
         .with_columns(
             # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window

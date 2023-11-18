@@ -14,6 +14,7 @@ from src.models.feature_extractor.spectrogram import SpecFeatureExtractor
 from src.models.spec1D import Spec1D
 from src.models.spec2Dcnn import Spec2DCNN
 from src.models.spec2Dcnn2Day import Spec2DCNN2Day
+from src.models.spec2Dcnn2DayV2 import Spec2DCNN2DayV2
 
 FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
@@ -132,10 +133,22 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
     elif cfg.model.name == "Spec2DCNN2Day":
-        print("num_timesteps", num_timesteps)
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
         decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes * 2, num_timesteps)
         model = Spec2DCNN2Day(
+            cfg=cfg,
+            feature_extractor=feature_extractor,
+            decoder=decoder,
+            encoder_name=cfg.model.encoder_name,
+            in_channels=feature_extractor.out_chans,
+            encoder_weights=cfg.model.encoder_weights,
+            mixup_alpha=cfg.augmentation.mixup_alpha,
+            cutmix_alpha=cfg.augmentation.cutmix_alpha,
+        )
+    elif cfg.model.name == "Spec2DCNN2DayV2":
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
+        decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes, num_timesteps)
+        model = Spec2DCNN2DayV2(
             cfg=cfg,
             feature_extractor=feature_extractor,
             decoder=decoder,

@@ -30,7 +30,7 @@ class SegModel(LightningModule):
         super().__init__()
         self.cfg = cfg
         self.val_event_df = val_event_df
-        if cfg.model.name == "Spec2DCNN2Day":
+        if (cfg.model.name == "Spec2DCNN2Day") or (cfg.model.name == "Spec2DCNN2DayV2"):
             day_duration = 24 * 60 * 12
             self.duration = day_duration * 2
             num_timesteps = nearest_valid_size(int(day_duration * cfg.upsample_rate), cfg.downsample_rate)
