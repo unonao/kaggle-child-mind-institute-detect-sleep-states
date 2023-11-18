@@ -36,6 +36,10 @@ python run/cv_train.py exp_name=exp029 "pos_weight=[1.0, 5.0, 5.0]" "features=00
 python run/cv_score.py exp_name=exp029 post_process.remove_periodicity=true post_process.distance=40 # 80: 0.7599
 python -m run.cv_inference exp_name=exp029 model.encoder_weights=null phase=train batch_size=8 "features=007" num_tta=2 # 2:0.7615→0.7728, 5:0.7668→0.7765
 
+python run/cv_train.py exp_name=exp044 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNN2DayV2 epoch=15 monitor=val_score monitor_mode=max duration=17280
+python run/cv_score.py exp_name=exp044 post_process.remove_periodicity=true post_process.distance=80 #  score: 0.7744
+python -m run.cv_inference exp_name=exp044 model.encoder_weights=null phase=train model=Spec2DCNN2DayV2 duration=17280  batch_size=8 "features=007" num_tta=3 # 1:0.7650→0.7744 # 2: 0.7630→0.7724 # 3: 0.7745→0.7814 # 5: 0.7749→0.7811
+
 ``` 
 
 #### inference
