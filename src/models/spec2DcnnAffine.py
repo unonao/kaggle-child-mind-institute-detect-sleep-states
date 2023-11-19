@@ -16,7 +16,7 @@ from src.models.loss.focal import FocalLoss
 from src.models.loss.focal_bce import FocalBCELoss
 
 
-class Spec2DCNN(nn.Module):
+class Spec2DCNNAffine(nn.Module):
     def __init__(
         self,
         cfg: DictConfig,
