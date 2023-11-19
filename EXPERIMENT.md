@@ -101,10 +101,11 @@ python -m run.cv_inference exp_name=exp044 model.encoder_weights=null phase=trai
 python run/cv_train.py exp_name=exp045 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNN2DayV2 epoch=30 monitor=val_score monitor_mode=max duration=17280
 
 python run/cv_train.py exp_name=exp046 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNSplit model.n_split=4 epoch=30 monitor=val_score monitor_mode=max duration=17280
+python run/cv_train.py exp_name=exp045 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNN2DayV2 epoch=30 monitor=val_score monitor_mode=max duration=17280
+
 
 python run/cv_train.py exp_name=exp047 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNSplit model.n_split=2 epoch=30 monitor=val_score monitor_mode=max duration=17280
-python run/cv_train.py exp_name=exp048 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNSplit model.n_split=3 epoch=30 monitor=val_score monitor_mode=max duration=17280
-python run/cv_train.py exp_name=exp045 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNN2DayV2 epoch=30 monitor=val_score monitor_mode=max duration=17280
+python run/cv_train.py exp_name=exp048 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
 
 
 python run/cv_train.py exp_name=exp049_affine "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNAffine epoch=30 monitor=val_score monitor_mode=max duration=17280

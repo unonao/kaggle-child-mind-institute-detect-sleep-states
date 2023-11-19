@@ -111,7 +111,9 @@ class Spec2DCNNMinMax(nn.Module):
         x, mid = self.encoder(x)  # (batch_size, 1, height, n_timesteps), (batch_size, 2 * height)
         x_min, x_max = torch.split(mid, mid.shape[1] // 2, dim=1)
         x = x.squeeze(1)  # (batch_size, height, n_timesteps)
-        x = torch.cat([x, x - x_min, x_max - x], dim=1)  # (batch_size, 3 * height, n_timesteps)
+        x = torch.cat(
+            [x, x - x_min.unsqueeze(2), x_max.unsqueeze(2) - x], dim=1
+        )  # (batch_size, 3 * height, n_timesteps)
         logits = self.decoder(x)  # (batch_size, n_classes, n_timesteps)
 
         output = {"logits": logits}
