@@ -12,6 +12,7 @@ from torchvision.transforms.functional import resize
 from tqdm import tqdm
 import pickle
 import gc
+import pickle
 
 from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_size
 from src.models.common import get_model
@@ -19,6 +20,8 @@ from src.utils.common import trace
 from src.utils.post_process import post_process_find_peaks
 from src.utils.periodicity import get_periodicity_dict
 from src.utils.metrics import event_detection_ap
+import ctypes
+from memory_profiler import profile
 
 
 def load_model(cfg: DictConfig, fold: int) -> nn.Module:
@@ -63,6 +66,9 @@ def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
         pin_memory=True,
         drop_last=False,
     )
+    del chunk_features
+    del valid_dataset
+    gc.collect()
     return valid_dataloader, series_ids
 
 
@@ -95,6 +101,9 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
         pin_memory=True,
         drop_last=False,
     )
+    del chunk_features
+    del test_dataset
+    gc.collect()
     return test_dataloader, series_ids
 
 
@@ -153,9 +162,14 @@ def main(cfg: DictConfig):
             with trace("inference"):
                 keys, preds = inference(cfg.duration, dataloader, model, device, use_amp=cfg.use_amp)
                 preds_tta_list.append(preds)
+            series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
+            del dataloader
+            del preds
+            del keys
+            torch.cuda.empty_cache()
+            gc.collect()
 
         # シリーズごとに各TTAの予測を平均
-        series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
         series2preds = {}
         for series_id in unique_series_ids:
             series_idx = np.where(series_ids == series_id)[0]
@@ -178,8 +192,11 @@ def main(cfg: DictConfig):
         del preds_tta_list
         del preds_list
         del counts_list
+        del series2preds
+        del series_ids
         torch.cuda.empty_cache()
         gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
     series2preds = {}
     if cfg.phase == "train":
@@ -190,30 +207,11 @@ def main(cfg: DictConfig):
         # シリーズごとに各foldの予測を平均
         for series_id in unique_series_ids:
             series2preds[series_id] = np.mean([se2pre[series_id] for se2pre in series2preds_list], axis=0)
-
-    with trace("load seq_df"):
-        # 結果をparquetに保存
-        if cfg.phase == "train":
-            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id"])
-        elif cfg.phase == "test":
-            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "test_series.parquet", columns=["series_id"])
-        series_count_dict = dict(seq_df.get_column("series_id").value_counts().iter_rows())
-    with trace("concat preds"):
-        unique_series_ids = (
-            seq_df.unique("series_id", keep="first", maintain_order=True).get_column("series_id").to_list()
-        )  # 順序を保ったままseries_idを取得
-        preds_list = []
-        for series_id in unique_series_ids:
-            this_series_preds = series2preds[series_id].reshape(-1, 3)
-            this_series_preds = this_series_preds[: series_count_dict[series_id], :]
-            preds_list.append(this_series_preds)
-        preds_all = np.concatenate(preds_list, axis=0)
-        seq_df = seq_df.with_columns(
-            pl.Series(name="pred_sleep", values=preds_all[:, 0]),
-            pl.Series(name="pred_onset", values=preds_all[:, 1]),
-            pl.Series(name="pred_wakeup", values=preds_all[:, 2]),
-        ).select(["pred_sleep", "pred_onset", "pred_wakeup"])
-        seq_df.write_parquet(f"{cfg.phase}_pred.parquet")
+    with open("series2preds.pkl", "wb") as f:
+        pickle.dump(series2preds, f)
+    del series2preds_list
+    gc.collect()
+    ctypes.CDLL("libc.so.6").malloc_trim(0)
 
     if cfg.phase == "train":
         # スコアリング
@@ -261,6 +259,41 @@ def main(cfg: DictConfig):
         with open(Path(cfg.dir.sub_dir) / "series2preds.pkl", "wb") as f:
             pickle.dump(series2preds, f)
         sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
+
+    with trace("load seq_df"):
+        # 結果をparquetに保存
+        if cfg.phase == "train":
+            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id"])
+        elif cfg.phase == "test":
+            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "test_series.parquet", columns=["series_id"])
+        series_count_dict = dict(seq_df.get_column("series_id").value_counts().iter_rows())
+        unique_series_ids = (
+            seq_df.unique("series_id", keep="first", maintain_order=True).get_column("series_id").to_list()
+        )  # 順序を保ったままseries_idを取得
+        del seq_df
+        gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+
+    with trace("concat preds"):
+        preds_list = []
+        for series_id in unique_series_ids:
+            this_series_preds = series2preds[series_id].reshape(-1, 3)
+            this_series_preds = this_series_preds[: series_count_dict[series_id], :]
+            preds_list.append(this_series_preds)
+        preds_all = np.concatenate(preds_list, axis=0)
+        del preds_list
+        del series2preds
+        gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+
+        pred_df = pl.DataFrame(
+            [
+                pl.Series(name="pred_sleep", values=preds_all[:, 0]),
+                pl.Series(name="pred_onset", values=preds_all[:, 1]),
+                pl.Series(name="pred_wakeup", values=preds_all[:, 2]),
+            ]
+        )
+        pred_df.write_parquet(f"{cfg.phase}_pred.parquet")
 
 
 if __name__ == "__main__":
