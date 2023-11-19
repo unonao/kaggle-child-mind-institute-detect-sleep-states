@@ -106,4 +106,9 @@ python run/cv_train.py exp_name=exp047 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8
 python run/cv_train.py exp_name=exp048 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNSplit model.n_split=3 epoch=30 monitor=val_score monitor_mode=max duration=17280
 python run/cv_train.py exp_name=exp045 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNN2DayV2 epoch=30 monitor=val_score monitor_mode=max duration=17280
 
+
+python run/cv_train.py exp_name=exp049_affine "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNAffine epoch=30 monitor=val_score monitor_mode=max duration=17280
+
+python run/cv_train.py exp_name=exp050_minmax "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=007" model=Spec2DCNNMinMax epoch=30 monitor=val_score monitor_mode=max duration=17280
+
 ```
