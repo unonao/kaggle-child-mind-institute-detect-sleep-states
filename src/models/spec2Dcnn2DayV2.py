@@ -86,7 +86,7 @@ class Spec2DCNN2DayV2(nn.Module):
     ) -> dict[str, torch.Tensor]:
         """Forward pass of the model.
         Args:
-            x (torch.Tensor): (batch_size, n_channels, n_timesteps)
+            x (torch.Tensor): (batch_size, n_channels, duration)
             labels (Optional[torch.Tensor], optional): (batch_size, n_timesteps, n_classes)
         Returns:
             dict[str, torch.Tensor]: logits (batch_size, n_timesteps, n_classes)
@@ -94,20 +94,20 @@ class Spec2DCNN2DayV2(nn.Module):
         x1, x2 = torch.split(x, x.shape[2] // 2, dim=2)
 
         # 2日分のデータを分割して並行に入力
-        x1 = self.feature_extractor(x1)  # (batch_size, n_channels, height, n_timesteps)
-        x2 = self.feature_extractor(x2)  # (batch_size, n_channels, height, n_timesteps)
+        x1 = self.feature_extractor(x1)  # (batch_size, n_channels, height, n_timesteps//2)
+        x2 = self.feature_extractor(x2)  # (batch_size, n_channels, height, n_timesteps//2)
 
-        x1 = self.encoder(x1).squeeze(1)  # (batch_size, height, n_timesteps)
-        x2 = self.encoder(x2).squeeze(1)  # (batch_size, height, n_timesteps)
+        x1 = self.encoder(x1).squeeze(1)  # (batch_size, height, n_timesteps//2)
+        x2 = self.encoder(x2).squeeze(1)  # (batch_size, height, n_timesteps//2)
 
         # 残差を結合してデコーダーに入力
-        x = torch.cat([x1, x1 - x2], dim=1)  # (batch_size, n_classes, n_timesteps)
-        logits1 = self.decoder(x)  # (batch_size, n_timesteps, n_classes)
+        x = torch.cat([x1, x1 - x2], dim=1)  # (batch_size, n_classes, n_timesteps//2)
+        logits1 = self.decoder(x)  # (batch_size, n_timesteps//2, n_classes)
 
         x = torch.cat([x2, x2 - x1], dim=1)
         logits2 = self.decoder(x)
 
-        logits = torch.cat([logits1, logits2], dim=1)
+        logits = torch.cat([logits1, logits2], dim=1)  # (batch_size, n_timesteps, n_classes)
         output = {"logits": logits}
         if labels is not None:
             loss = self.loss_fn(logits, labels, masks)

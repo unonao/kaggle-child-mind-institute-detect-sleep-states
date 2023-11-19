@@ -30,18 +30,13 @@ class SegModel(LightningModule):
         super().__init__()
         self.cfg = cfg
         self.val_event_df = val_event_df
-        if (cfg.model.name == "Spec2DCNN2Day") or (cfg.model.name == "Spec2DCNN2DayV2"):
-            day_duration = 24 * 60 * 12
-            self.duration = day_duration * 2
-            num_timesteps = nearest_valid_size(int(day_duration * cfg.upsample_rate), cfg.downsample_rate)
-        else:
-            self.duration = duration
-            num_timesteps = nearest_valid_size(int(duration * cfg.upsample_rate), cfg.downsample_rate)
+        self.duration = duration
+        valid_duration = nearest_valid_size(int(duration * cfg.upsample_rate), cfg.downsample_rate)
         self.model = get_model(
             cfg,
             feature_dim=feature_dim,
             n_classes=num_classes,
-            num_timesteps=num_timesteps // cfg.downsample_rate,
+            num_timesteps=valid_duration // cfg.downsample_rate,
         )
         self.postfix = f"_fold{fold}" if fold is not None else ""
         self.validation_step_outputs: list = []

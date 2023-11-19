@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms.functional import resize
 from tqdm import tqdm
 import pickle
-import gc 
+import gc
 
 from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_size
 from src.models.common import get_model
@@ -36,14 +36,15 @@ def load_model(cfg: DictConfig, fold: int) -> nn.Module:
             Path(cfg.dir.cv_model_dir) / cfg.weight["exp_name"] / cfg.weight["run_name"] / f"best_model_fold{fold}.pth"
         )
         model.load_state_dict(
-            torch.load(weight_path), strict=False  #  Unexpected key(s) in state_dict: "loss_fn.pos_weight". の回避
+            torch.load(weight_path),
+            strict=False,  #  Unexpected key(s) in state_dict: "loss_fn.pos_weight". の回避
         )
         print('load weight from "{}"'.format(weight_path))
     return model
 
 
-def get_valid_dataloader(cfg: DictConfig, fold:int, stride:int) -> DataLoader:
-    series_ids = cfg[f'fold_{fold}']['valid_series_ids']
+def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
+    series_ids = cfg[f"fold_{fold}"]["valid_series_ids"]
     chunk_features = load_chunk_features(
         duration=cfg.duration,
         feature_names=cfg.features,
@@ -65,8 +66,7 @@ def get_valid_dataloader(cfg: DictConfig, fold:int, stride:int) -> DataLoader:
     return valid_dataloader, series_ids
 
 
-
-def get_test_dataloader(cfg: DictConfig, stride:int) -> DataLoader:
+def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
     """get test dataloader
 
     Args:
@@ -139,10 +139,14 @@ def main(cfg: DictConfig):
         for tta_id in range(cfg.num_tta):  # TTA
             if cfg.phase == "train":
                 with trace("load valid dataloader"):
-                    dataloader, unique_series_ids = get_valid_dataloader(cfg, fold, stride = (cfg.duration//cfg.num_tta) * tta_id)
+                    dataloader, unique_series_ids = get_valid_dataloader(
+                        cfg, fold, stride=(cfg.duration // cfg.num_tta) * tta_id
+                    )
             elif cfg.phase == "test":
                 with trace("load test dataloader"):
-                    dataloader, unique_series_ids = get_test_dataloader(cfg, stride = (cfg.duration//cfg.num_tta) * tta_id)
+                    dataloader, unique_series_ids = get_test_dataloader(
+                        cfg, stride=(cfg.duration // cfg.num_tta) * tta_id
+                    )
 
             # inference
             preds_list = []
@@ -157,10 +161,10 @@ def main(cfg: DictConfig):
             series_idx = np.where(series_ids == series_id)[0]
             preds_list = []
             counts_list = []
-            for tta_id in range(cfg.num_tta):            
+            for tta_id in range(cfg.num_tta):
                 this_series_preds = preds_tta_list[tta_id][series_idx].reshape(-1, 3)
-                # stride 分ずれているので元の位置に戻す
-                stride = (cfg.duration//cfg.num_tta) * tta_id
+                # stride 分ずれているので元の位置に戻す(右にずらす)。左の空白は0埋めして後で割るときに無視する
+                stride = (cfg.duration // cfg.num_tta) * tta_id
                 this_series_preds = np.roll(this_series_preds, stride, axis=0)
                 this_series_preds[:stride] = 0
                 counts = np.ones(len(this_series_preds))
@@ -176,8 +180,7 @@ def main(cfg: DictConfig):
         del counts_list
         torch.cuda.empty_cache()
         gc.collect()
-    
-    # phase が train なら series2preds_list を結合、test なら平均
+
     series2preds = {}
     if cfg.phase == "train":
         # リストの辞書を結合
@@ -188,8 +191,30 @@ def main(cfg: DictConfig):
         for series_id in unique_series_ids:
             series2preds[series_id] = np.mean([se2pre[series_id] for se2pre in series2preds_list], axis=0)
 
+    # 結果をparquetに保存
+    if cfg.phase == "train":
+        seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet")
+    elif cfg.phase == "test":
+        seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "test_series.parquet")
+    series_count_dict = dict(seq_df.get_column("series_id").value_counts().iter_rows())
+    # 順序を保ったままseries_idを取得
+    all_series_ids = seq_df.get_column("series_id").to_numpy()
+    _, idx = np.unique(all_series_ids, return_index=True)
+    unique_series_ids = all_series_ids[np.sort(idx)]
+    preds_list = []
+    for series_id in unique_series_ids:
+        this_series_preds = series2preds[series_id].reshape(-1, 3)
+        this_series_preds = this_series_preds[: series_count_dict[series_id], :]
+        preds_list.append(this_series_preds)
+    preds_all = np.concatenate(preds_list, axis=0)
+    seq_df = seq_df.with_columns(
+        pl.Series(name="pred_sleep", values=preds_all[:, 0]),
+        pl.Series(name="pred_onset", values=preds_all[:, 1]),
+        pl.Series(name="pred_wakeup", values=preds_all[:, 2]),
+    ).select(["pred_sleep", "pred_onset", "pred_wakeup"])
+    seq_df.write_parquet(f"{cfg.phase}_pred.parquet")
 
-    if cfg.phase=="train":
+    if cfg.phase == "train":
         # スコアリング
         event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
         sub_df = post_process_find_peaks(
@@ -232,8 +257,7 @@ def main(cfg: DictConfig):
                     distance=cfg.post_process.distance,
                     periodicity_dict=periodicity_dict,
                 )
-
-        with open(Path(cfg.dir.sub_dir) / "series2preds.pkl", 'wb') as f:
+        with open(Path(cfg.dir.sub_dir) / "series2preds.pkl", "wb") as f:
             pickle.dump(series2preds, f)
         sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
 

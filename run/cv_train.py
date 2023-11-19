@@ -21,7 +21,6 @@ import gc
 
 from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
-from src.datamodule.seg2day import SegDataModule as SegDataModule2Day
 from src.modelmodule.seg import SegModel
 from src.utils.metrics import event_detection_ap
 
@@ -45,8 +44,6 @@ def main(cfg: DictConfig):  # type: ignore
             datamodule = SegDataModule(cfg, fold)
         elif cfg.datamodule.how == "stride":
             datamodule = SegDataModuleStride(cfg, fold)
-        elif cfg.datamodule.how == "2day":
-            datamodule = SegDataModule2Day(cfg, fold)
 
         LOGGER.info("Set Up DataModule")
         model = SegModel(

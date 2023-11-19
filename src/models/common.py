@@ -133,8 +133,8 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
     elif cfg.model.name == "Spec2DCNN2Day":
-        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
-        decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes * 2, num_timesteps)
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps // 2)
+        decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes * 2, num_timesteps // 2)
         model = Spec2DCNN2Day(
             cfg=cfg,
             feature_extractor=feature_extractor,
@@ -146,8 +146,8 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
     elif cfg.model.name == "Spec2DCNN2DayV2":
-        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
-        decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes, num_timesteps)
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps // 2)
+        decoder = get_decoder(cfg, feature_extractor.height * 2, n_classes, num_timesteps // 2)
         model = Spec2DCNN2DayV2(
             cfg=cfg,
             feature_extractor=feature_extractor,
