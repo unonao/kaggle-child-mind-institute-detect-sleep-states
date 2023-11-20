@@ -6,6 +6,7 @@ import numpy as np
 import polars as pl
 from omegaconf import DictConfig
 from tqdm import tqdm
+from scipy.signal import savgol_filter
 
 from src.utils.common import trace
 from src.utils.periodicity import predict_periodicity_v2
@@ -41,6 +42,8 @@ FEATURE_NAMES = [
     "weekday_cos",
     "activity_count",
     "lids",
+    "anglez_diff_nonzero_5",
+    "anglez_diff_nonzero_60",
 ] + [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
 
 ANGLEZ_MEAN = -8.810476
@@ -103,7 +106,16 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             # 一つとなりとの差分
             pl.col("anglez").diff().fill_null(0).alias("anglez_diff"),
             pl.col("enmo").diff().fill_null(0).alias("enmo_diff"),
-            pl.col("anglez").diff(1).abs().alias("anglez_abs_diff"),
+            pl.col("anglez").diff(1).fill_null(0).abs().alias("anglez_abs_diff"),
+            (pl.col("anglez_raw").diff(1).fill_null(0).abs() < 0.1).cast(pl.Float32).alias("anglez_diff_nonzero"),
+        )
+        .with_columns(
+            pl.col("anglez_diff_nonzero")
+            .rolling_mean(5 * 60 // 5, center=True, min_periods=1)
+            .alias("anglez_diff_nonzero_5"),
+            pl.col("anglez_diff_nonzero")
+            .rolling_mean(60 * 60 // 5, center=True, min_periods=1)
+            .alias("anglez_diff_nonzero_60"),
         )
         .with_columns(
             # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window

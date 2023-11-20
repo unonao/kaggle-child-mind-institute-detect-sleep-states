@@ -18,6 +18,7 @@ from src.models.spec2Dcnn2DayV2 import Spec2DCNN2DayV2
 from src.models.spec2DcnnSplit import Spec2DCNNSplit
 from src.models.spec2DcnnAffine import Spec2DCNNAffine
 from src.models.spec2DcnnMinMax import Spec2DCNNMinMax
+from src.models.specWeightAvg import SpecWeightAvg
 
 FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
@@ -204,6 +205,24 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
+    elif cfg.model.name == "SpecWeightAvg":
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
+        decoders = [
+            get_decoder(cfg, feature_extractor.height, 1, num_timesteps),
+            get_decoder(cfg, feature_extractor.height, 1, num_timesteps),
+        ]
+        model = SpecWeightAvg(
+            cfg=cfg,
+            feature_extractor=feature_extractor,
+            decoders=decoders,
+            encoder_name=cfg.model.encoder_name,
+            in_channels=feature_extractor.out_chans,
+            height=feature_extractor.height,
+            encoder_weights=cfg.model.encoder_weights,
+            mixup_alpha=cfg.augmentation.mixup_alpha,
+            cutmix_alpha=cfg.augmentation.cutmix_alpha,
+        )
+
     else:
         raise NotImplementedError
 
