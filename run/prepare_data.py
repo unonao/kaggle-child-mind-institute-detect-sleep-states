@@ -44,6 +44,10 @@ FEATURE_NAMES = [
     "lids",
     "anglez_diff_nonzero_5",
     "anglez_diff_nonzero_60",
+    "anglez_abs_diff_mean_24h",
+    "anglez_diff_nonzero_5_mean_24h",
+    "anglez_diff_nonzero_60_mean_24h",
+    "lids_mean_24h",
 ] + [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
 
 ANGLEZ_MEAN = -8.810476
@@ -130,6 +134,20 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             (1 / (pl.col("activity_count") + 1)).alias("lids"),
         )
     )
+
+    # 大域特徴
+    one_day_steps = 24 * 60 * 60 // 5
+    series_df = series_df.with_columns(
+        pl.arange(0, series_df.height).mod(one_day_steps).alias("group_number"),
+    )
+    # groupごとに平均を取る
+    series_df = series_df.with_columns(
+        pl.col("anglez_abs_diff").mean().over("group_number").alias("anglez_abs_diff_mean_24h"),
+        pl.col("anglez_diff_nonzero_5").mean().over("group_number").alias("anglez_diff_nonzero_5_mean_24h"),
+        pl.col("anglez_diff_nonzero_60").mean().over("group_number").alias("anglez_diff_nonzero_60_mean_24h"),
+        pl.col("lids").mean().over("group_number").alias("lids_mean_24h"),
+    )
+
     return series_df
 
 
