@@ -16,6 +16,8 @@
 - "anglez_diff_nonzero_5_mean_24h"
 - "anglez_diff_nonzero_60_mean_24h"
 - "lids_mean_24h"
+- "periodicity"
+- "non_periodicity"
 - "anglez_abs_diff_var_24h"
 - "anglez_diff_nonzero_5_var_24h"
 - "anglez_diff_nonzero_60_var_24h"
