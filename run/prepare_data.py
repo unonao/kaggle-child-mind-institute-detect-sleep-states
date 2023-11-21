@@ -48,6 +48,10 @@ FEATURE_NAMES = [
     "anglez_diff_nonzero_5_mean_24h",
     "anglez_diff_nonzero_60_mean_24h",
     "lids_mean_24h",
+    "anglez_abs_diff_var_24h",
+    "anglez_diff_nonzero_5_var_24h",
+    "anglez_diff_nonzero_60_var_24h",
+    "lids_var_24h",
 ] + [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
 
 ANGLEZ_MEAN = -8.810476
@@ -146,6 +150,14 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         pl.col("anglez_diff_nonzero_5").mean().over("group_number").alias("anglez_diff_nonzero_5_mean_24h"),
         pl.col("anglez_diff_nonzero_60").mean().over("group_number").alias("anglez_diff_nonzero_60_mean_24h"),
         pl.col("lids").mean().over("group_number").alias("lids_mean_24h"),
+        pl.col("anglez_abs_diff").var().over("group_number").fill_null(0).alias("anglez_abs_diff_var_24h"),
+        pl.col("anglez_diff_nonzero_5").var().over("group_number").fill_null(0).alias("anglez_diff_nonzero_5_var_24h"),
+        pl.col("anglez_diff_nonzero_60")
+        .var()
+        .over("group_number")
+        .fill_null(0)
+        .alias("anglez_diff_nonzero_60_var_24h"),
+        pl.col("lids").var().over("group_number").fill_null(0).alias("lids_var_24h"),
     )
 
     return series_df
@@ -164,6 +176,7 @@ def save_each_series(cfg, this_series_df: pl.DataFrame, columns: list[str], outp
         seq, cfg.periodicity.downsample_rate, cfg.periodicity.stride_min, cfg.periodicity.split_min
     )
     np.save(output_dir / "periodicity.npy", periodicity)
+    np.save(output_dir / "non_periodicity.npy", 1 - periodicity)
 
 
 @hydra.main(config_path="conf", config_name="prepare_data", version_base="1.2")

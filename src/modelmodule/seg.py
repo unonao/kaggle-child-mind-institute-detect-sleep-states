@@ -14,6 +14,7 @@ from src.datamodule.seg import nearest_valid_size
 from src.models.common import get_model
 from src.utils.metrics import event_detection_ap
 from src.utils.post_process import post_process_for_seg
+from src.utils.periodicity import get_periodicity_dict
 
 
 class SegModel(LightningModule):
@@ -121,11 +122,13 @@ class SegModel(LightningModule):
         losses = np.array([x[3] for x in self.validation_step_outputs])
         loss = losses.mean()
 
+        periodicity_dict = get_periodicity_dict(self.cfg)
         val_pred_df = post_process_for_seg(
             keys=keys,
             preds=preds[:, :, [1, 2]],
             score_th=self.cfg.post_process.score_th,
             distance=self.cfg.post_process.distance,
+            periodicity_dict=periodicity_dict,
         )
         score = event_detection_ap(self.val_event_df.to_pandas(), val_pred_df.to_pandas())
         self.log(f"val_score{self.postfix}", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)

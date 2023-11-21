@@ -116,4 +116,7 @@ python run/cv_train.py exp_name=exp051_weightavg "pos_weight=[1.0, 5.0, 5.0]" ba
 
 python run/cv_train.py exp_name=exp052 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=010" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
 python run/cv_train.py exp_name=exp053 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=011" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
+
+python run/cv_train.py exp_name=exp054 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
+python run/cv_train.py exp_name=exp054 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=013" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
 ```

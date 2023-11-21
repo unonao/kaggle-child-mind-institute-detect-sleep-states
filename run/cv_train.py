@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 import polars as pl
-
+import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -18,6 +18,8 @@ from pytorch_lightning.callbacks import (
 from pytorch_lightning.loggers import WandbLogger
 import wandb
 import gc
+from src.utils.periodicity import get_periodicity_dict
+from src.utils.post_process import post_process_for_seg
 
 from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
@@ -35,8 +37,9 @@ def main(cfg: DictConfig):  # type: ignore
     # init experiment logger
     pl_logger = WandbLogger(
         name=cfg.exp_name,
-        project="child-mind-institute-detect-sleep-states",
+        project="child-mind-institute-detect-sleep-states-v2",
     )
+
     for fold in range(cfg.num_fold):
         LOGGER.info(f"Start Training Fold {fold}")
         # init lightning model
@@ -85,21 +88,6 @@ def main(cfg: DictConfig):  # type: ignore
         )
 
         trainer.fit(model, datamodule=datamodule)
-        """
-        # load best weights
-        model = model.load_from_checkpoint(
-            checkpoint_cb.best_model_path,
-            cfg=cfg,
-            val_event_df=datamodule.valid_event_df,
-            feature_dim=len(cfg.features),
-            num_classes=len(cfg.labels),
-            duration=cfg.duration,
-        )
-        weights_path = str(f"model_weights_fold{fold}.pth")
-        LOGGER.info(f"Extracting and saving best weights: {weights_path}")
-        torch.save(model.model.state_dict(), weights_path)
-        """
-
         del model
         del trainer
         del datamodule
@@ -112,20 +100,48 @@ def main(cfg: DictConfig):  # type: ignore
     train_event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
 
     # 予測結果の読み込み
-    oof_event_df_list = []
+    keys_list = []
+    preds_list = []
     for fold in range(cfg.num_fold):
-        oof_event_df_list.append(pl.read_csv(f"val_pred_df_fold{fold}.csv"))
-    oof_event_df = pl.concat(oof_event_df_list)
+        preds_list.append(np.load(f"preds_fold{fold}.npy"))
+        keys_list.append(np.load(f"keys_fold{fold}.npy"))
+    preds = np.concatenate(preds_list, axis=0)
+    keys = np.concatenate(keys_list, axis=0)
 
     # 評価
     LOGGER.info("Start event_detection_ap")
+    oof_event_df = post_process_for_seg(
+        keys,
+        preds[:, :, [1, 2]],
+        score_th=cfg.post_process.score_th,
+        distance=cfg.post_process.distance,
+    )
     score, ap_table = event_detection_ap(
         train_event_df.to_pandas(),
         oof_event_df.to_pandas(),
         with_table=True,
     )
-
     wandb.log({"ap_table": wandb.Table(dataframe=ap_table.reset_index()[["event", "tolerance", "ap"]])})
+    LOGGER.info(f"OOF score: {score}")
+    wandb.log({"cv_score": score})
+
+    # periodicity
+    periodicity_dict = get_periodicity_dict(cfg)
+    oof_event_df = post_process_for_seg(
+        keys,
+        preds[:, :, [1, 2]],
+        score_th=cfg.post_process.score_th,
+        distance=cfg.post_process.distance,
+        periodicity_dict=periodicity_dict,
+    )
+    score, ap_table = event_detection_ap(
+        train_event_df.to_pandas(),
+        oof_event_df.to_pandas(),
+        with_table=True,
+    )
+    wandb.log({"ap_table_wo_periodicity": wandb.Table(dataframe=ap_table.reset_index()[["event", "tolerance", "ap"]])})
+    LOGGER.info(f"OOF score with out periodicity: {score}")
+    wandb.log({"cv_score_wo_periodicity": score})
 
     for event in ["onset", "wakeup"]:
         plt.figure(figsize=(10, 10))
@@ -140,9 +156,6 @@ def main(cfg: DictConfig):  # type: ignore
         # 図をwandbにログとして保存
         wandb.log({f"pr_curve_{event}": wandb.Image(plt)})
         plt.close()
-
-    LOGGER.info(f"OOF score: {score}")
-    wandb.log({"cv_score": score})
 
     return
 
