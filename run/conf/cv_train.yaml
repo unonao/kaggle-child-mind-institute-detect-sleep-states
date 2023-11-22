@@ -26,8 +26,9 @@ defaults:
   - loss: bce
 
 datamodule:
-  how: random # random, stride
+  how: random # random, stride, overlap
   train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
+  overlap: 0 
 
 num_fold: 5
 

@@ -46,6 +46,8 @@ class SegModel(LightningModule):
         self.datamodule = datamodule
         self.epoch = 0
 
+        self.overlap = cfg.datamodule.overlap
+
     def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> dict[str, Optional[torch.Tensor]]:
         return self.model(x, labels)
 
@@ -117,10 +119,14 @@ class SegModel(LightningModule):
         keys = []
         for x in self.validation_step_outputs:
             keys.extend(x[0])
-        labels = np.concatenate([x[1] for x in self.validation_step_outputs])
-        preds = np.concatenate([x[2] for x in self.validation_step_outputs])
+        l = self.overlap if self.overlap > 0 else None
+        r = -self.overlap if self.overlap > 0 else None
+        labels = np.concatenate([x[1][:, l:r, :] for x in self.validation_step_outputs])
+        preds = np.concatenate([x[2][:, l:r, :] for x in self.validation_step_outputs])
         losses = np.array([x[3] for x in self.validation_step_outputs])
         loss = losses.mean()
+
+        print(preds.shape)
 
         periodicity_dict = get_periodicity_dict(self.cfg)
         val_pred_df = post_process_for_seg(
@@ -130,6 +136,8 @@ class SegModel(LightningModule):
             distance=self.cfg.post_process.distance,
             periodicity_dict=periodicity_dict,
         )
+        print(self.val_event_df.head())
+        print(val_pred_df.head())
         score = event_detection_ap(self.val_event_df.to_pandas(), val_pred_df.to_pandas())
         self.log(f"val_score{self.postfix}", score, on_step=False, on_epoch=True, logger=True, prog_bar=True)
 

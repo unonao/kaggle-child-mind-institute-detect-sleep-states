@@ -23,6 +23,7 @@ from src.utils.post_process import post_process_for_seg
 
 from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
+from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
 from src.modelmodule.seg import SegModel
 from src.utils.metrics import event_detection_ap
 
@@ -47,6 +48,8 @@ def main(cfg: DictConfig):  # type: ignore
             datamodule = SegDataModule(cfg, fold)
         elif cfg.datamodule.how == "stride":
             datamodule = SegDataModuleStride(cfg, fold)
+        elif cfg.datamodule.how == "overlap":
+            datamodule = SegDataModuleOverlap(cfg, fold)
 
         LOGGER.info("Set Up DataModule")
         model = SegModel(

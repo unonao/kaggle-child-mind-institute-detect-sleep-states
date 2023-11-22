@@ -15,6 +15,10 @@ import gc
 import pickle
 
 from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_size
+from src.datamodule.seg_overlap import (
+    TestDataset as TestDatasetOverlap,
+    load_chunk_features as load_chunk_features_overlap,
+)
 from src.models.common import get_model
 from src.utils.common import trace
 from src.utils.post_process import post_process_find_peaks
@@ -48,24 +52,45 @@ def load_model(cfg: DictConfig, fold: int) -> nn.Module:
 
 def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
     series_ids = cfg[f"fold_{fold}"]["valid_series_ids"]
-    chunk_features = load_chunk_features(
-        duration=cfg.duration,
-        feature_names=cfg.features,
-        series_ids=series_ids,
-        processed_dir=Path(cfg.dir.processed_dir),
-        phase=cfg.phase,
-        stride=stride,
-        debug=cfg.debug,
-    )
-    valid_dataset = TestDataset(cfg, chunk_features=chunk_features)
-    valid_dataloader = DataLoader(
-        valid_dataset,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-        pin_memory=True,
-        drop_last=False,
-    )
+    if cfg.datamodule.how == "overlap":
+        chunk_features = load_chunk_features_overlap(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase=cfg.phase,
+            stride=stride,
+            overlap=cfg.datamodule.overlap,
+            debug=cfg.debug,
+        )
+        valid_dataset = TestDatasetOverlap(cfg, chunk_features=chunk_features)
+        valid_dataloader = DataLoader(
+            valid_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
+    else:
+        chunk_features = load_chunk_features(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase=cfg.phase,
+            stride=stride,
+            debug=cfg.debug,
+        )
+        valid_dataset = TestDataset(cfg, chunk_features=chunk_features)
+        valid_dataloader = DataLoader(
+            valid_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
     del chunk_features
     del valid_dataset
     gc.collect()
@@ -83,24 +108,47 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
     """
     feature_dir = Path(cfg.dir.processed_dir) / cfg.phase
     series_ids = [x.name for x in feature_dir.glob("*")]
-    chunk_features = load_chunk_features(
-        duration=cfg.duration,
-        feature_names=cfg.features,
-        series_ids=series_ids,
-        processed_dir=Path(cfg.dir.processed_dir),
-        phase=cfg.phase,
-        stride=stride,
-        debug=cfg.debug,
-    )
-    test_dataset = TestDataset(cfg, chunk_features=chunk_features)
-    test_dataloader = DataLoader(
-        test_dataset,
-        batch_size=cfg.batch_size,
-        shuffle=False,
-        num_workers=cfg.num_workers,
-        pin_memory=True,
-        drop_last=False,
-    )
+
+    if cfg.datamodule.how == "overlap":
+        chunk_features = load_chunk_features_overlap(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase=cfg.phase,
+            stride=stride,
+            overlap=cfg.datamodule.overlap,
+            debug=cfg.debug,
+        )
+        test_dataset = TestDatasetOverlap(cfg, chunk_features=chunk_features)
+        test_dataloader = DataLoader(
+            test_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
+
+    else:
+        chunk_features = load_chunk_features(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase=cfg.phase,
+            stride=stride,
+            debug=cfg.debug,
+        )
+        test_dataset = TestDataset(cfg, chunk_features=chunk_features)
+        test_dataloader = DataLoader(
+            test_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
     del chunk_features
     del test_dataset
     gc.collect()
@@ -108,7 +156,7 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
 
 
 def inference(
-    duration: int, loader: DataLoader, model: nn.Module, device: torch.device, use_amp
+    duration: int, loader: DataLoader, model: nn.Module, device: torch.device, use_amp, overlap: int | None = None
 ) -> tuple[list[str], np.ndarray]:
     model = model.to(device)
     model.eval()
@@ -130,6 +178,9 @@ def inference(
             keys.extend(key)
 
     preds = np.concatenate(preds)
+    if overlap is not None:
+        overlap = overlap if overlap > 0 else None
+        preds = preds[:, overlap:-overlap, :]
     return keys, preds
 
 
@@ -160,7 +211,9 @@ def main(cfg: DictConfig):
             # inference
             preds_list = []
             with trace("inference"):
-                keys, preds = inference(cfg.duration, dataloader, model, device, use_amp=cfg.use_amp)
+                keys, preds = inference(
+                    cfg.duration, dataloader, model, device, use_amp=cfg.use_amp, overlap=cfg.datamodule.overlap
+                )
                 preds_tta_list.append(preds)
             series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
             del dataloader

@@ -119,4 +119,20 @@ python run/cv_train.py exp_name=exp053 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8
 
 python run/cv_train.py exp_name=exp054 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
 python run/cv_train.py exp_name=exp055 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=013" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280
+
+python run/cv_train.py exp_name=exp056 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 model.encoder_name=mit_b0
+
+python run/cv_train.py exp_name=exp057 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 model.encoder_name=resnet18
+python run/cv_train.py exp_name=exp057_resnet50 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 model.encoder_name=resnet50
+
+python run/cv_train.py exp_name=exp058 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 model.encoder_name=timm-mobilenetv3_small_075
+
+python run/cv_train.py exp_name=exp057_mobliev3_s100 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 model.encoder_name=timm-mobilenetv3_small_100
+
+
+python run/cv_train.py exp_name=054_overlap "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.overlap=360 datamodule.how=overlap
+
+python run/cv_train.py exp_name=exp059 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" epoch=30 datamodule.overlap=180 datamodule.how=overlap monitor=val_score monitor_mode=max duration=2160 bg_sampling_rate=0.1 # 3h TODO negative sampling をなくす
+
+
 ```
