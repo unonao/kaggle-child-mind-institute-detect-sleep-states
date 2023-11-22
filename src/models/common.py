@@ -19,6 +19,7 @@ from src.models.spec2DcnnSplit import Spec2DCNNSplit
 from src.models.spec2DcnnAffine import Spec2DCNNAffine
 from src.models.spec2DcnnMinMax import Spec2DCNNMinMax
 from src.models.specWeightAvg import SpecWeightAvg
+from src.models.spec2DcnnOverlap import Spec2DCNNOverlap
 
 FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
@@ -117,6 +118,19 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
         feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
         decoder = get_decoder(cfg, feature_extractor.height, n_classes, num_timesteps)
         model = Spec2DCNN(
+            cfg=cfg,
+            feature_extractor=feature_extractor,
+            decoder=decoder,
+            encoder_name=cfg.model.encoder_name,
+            in_channels=feature_extractor.out_chans,
+            encoder_weights=cfg.model.encoder_weights,
+            mixup_alpha=cfg.augmentation.mixup_alpha,
+            cutmix_alpha=cfg.augmentation.cutmix_alpha,
+        )
+    elif cfg.model.name == "Spec2DCNNOverlap":
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
+        decoder = get_decoder(cfg, feature_extractor.height, n_classes, num_timesteps)
+        model = Spec2DCNNOverlap(
             cfg=cfg,
             feature_extractor=feature_extractor,
             decoder=decoder,

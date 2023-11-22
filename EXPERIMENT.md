@@ -134,5 +134,7 @@ python run/cv_train.py exp_name=054_overlap "pos_weight=[1.0, 5.0, 5.0]" batch_s
 
 python run/cv_train.py exp_name=exp059 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" epoch=30 datamodule.overlap=180 datamodule.how=overlap monitor=val_score monitor_mode=max duration=2160 bg_sampling_rate=0.1 # 3h TODO negative sampling をなくす
 
+python run/cv_train.py exp_name=exp059 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" epoch=30 datamodule.overlap=180 datamodule.how=overlap monitor=val_score monitor_mode=max duration=2160 bg_sampling_rate=0.5 # 3h TODO negative sampling をなくす
 
+python run/cv_train.py exp_name=exp059_triplet "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" epoch=30 datamodule.overlap=2160 datamodule.how=overlap monitor=val_score monitor_mode=max duration=6480 bg_sampling_rate=0.1 # 9h TODO negative sampling をなくす
 ```
