@@ -40,6 +40,7 @@ def main(cfg: DictConfig):  # type: ignore
         name=cfg.exp_name,
         project="child-mind-institute-detect-sleep-states-v2",
     )
+    pl_logger.log_hyperparams(cfg)
 
     for fold in range(cfg.num_fold):
         LOGGER.info(f"Start Training Fold {fold}")
