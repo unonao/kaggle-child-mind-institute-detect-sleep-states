@@ -19,27 +19,35 @@ from src.utils.common import pad_if_needed
 ###################
 
 
-def load_chunk_features_stride(
-    duration: int,
+def load_features(
     feature_names: list[str],
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
-    stride: int = 2880,  # 4h=2880step
 ) -> dict[str, np.ndarray]:
-    features = {}
-
+    raw_features = {}
     if series_ids is None:
         series_ids = [series_dir.name for series_dir in (processed_dir / phase).glob("*")]
-
     for series_id in series_ids:
         series_dir = processed_dir / phase / series_id
         this_feature = []
         for feature_name in feature_names:
             this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
         this_feature = np.stack(this_feature, axis=1)
-        start = 0
-        end = duration
+        raw_features[series_id] = this_feature
+    return raw_features
+
+
+def split_chunk_features_stride(
+    raw_features: dict[str, np.ndarray],
+    duration: int,
+    stride: int = 2880,  # 4h=2880step
+    offset: int = 0,  # 開始地点をずらす
+) -> dict[str, np.ndarray]:
+    features = {}
+    for series_id, this_feature in raw_features.items():
+        start = offset
+        end = start + duration
         while start < len(this_feature):
             chunk_feature = this_feature[start:end]
             chunk_feature = pad_if_needed(chunk_feature, duration, pad_value=0)
@@ -96,7 +104,14 @@ def random_crop(pos: int, duration: int, max_end) -> tuple[int, int]:
 ###################
 # Label
 ###################
-def get_label(this_event_df: pd.DataFrame, num_frames: int, duration: int, start: int, end: int) -> np.ndarray:
+def get_label(
+    this_event_df: pd.DataFrame,
+    num_frames: int,
+    duration: int,
+    start: int,
+    end: int,
+    tolerances: list[int] = [12, 36, 60, 90, 120, 150, 180, 240, 300, 360],
+) -> np.ndarray:
     """
     (num_frames,3) のラベルを作成
     duration は step 単位であり、num_frames は 出力につかうframe数を表しているためアップサンプリングやダウンサンプリングの影響で変化するケースがあるので注意。
@@ -106,21 +121,31 @@ def get_label(this_event_df: pd.DataFrame, num_frames: int, duration: int, start
     # ざっくりと当てはまりそうな範囲でフィルタリング
     this_event_df = this_event_df.query("@start <= wakeup & onset <= @end")
 
+    # labelとtoleranceを考慮したマスクを作成(イベント位置からtoleranceの範囲内のみ1)
     label = np.zeros((num_frames, 3))
+    masks = np.zeros((len(tolerances), num_frames, 2))
     # onset, wakeup, sleepのラベルを作成
     for onset, wakeup in this_event_df[["onset", "wakeup"]].to_numpy():
         onset = int((onset - start) / duration * num_frames)
         wakeup = int((wakeup - start) / duration * num_frames)
         if onset >= 0 and onset < num_frames:
             label[onset, 1] = 1
+            for i, tolerance in enumerate(tolerances):
+                masks[i, max(0, onset - tolerance) : min(num_frames, onset + tolerance), 0] = 1
         if wakeup < num_frames and wakeup >= 0:
             label[wakeup, 2] = 1
+            for i, tolerance in enumerate(tolerances):
+                masks[
+                    i,
+                    max(0, wakeup - tolerance) : min(num_frames, wakeup + tolerance),
+                    1,
+                ] = 1
 
         onset = max(0, onset)
         wakeup = min(num_frames, wakeup)
         label[onset:wakeup, 0] = 1  # sleep
 
-    return label
+    return label, masks
 
 
 # ref: https://www.kaggle.com/competitions/dfl-bundesliga-data-shootout/discussion/360236#2004730
@@ -214,7 +239,7 @@ class TrainDataset(Dataset):
             # from hard label to gaussian label
             num_frames = self.upsampled_num_frames // self.cfg.downsample_rate
             this_event_df = self.event_df.query("series_id == @series_id").reset_index(drop=True)
-            label = get_label(this_event_df, num_frames, self.cfg.duration, start, end)
+            label, masks = get_label(this_event_df, num_frames, self.cfg.duration, start, end)
             label[:, [1, 2]] = gaussian_label(
                 label[:, [1, 2]], offset=self.cfg.offset, sigma=self.cfg.sigma
             )  # onset, wakeup のみハードラベルなのでガウシアンラベルに変換
@@ -223,6 +248,7 @@ class TrainDataset(Dataset):
                 "series_id": series_id,
                 "feature": feature,  # (num_features, upsampled_num_frames)
                 "label": torch.FloatTensor(label),  # (pred_length, num_classes)
+                "masks": torch.FloatTensor(masks),  # (num_tolerances, pred_length, 2)
             }
             return self.cache[idx]
 
@@ -263,7 +289,7 @@ class ValidDataset(Dataset):
         start = chunk_id * self.cfg.duration
         end = start + self.cfg.duration
         num_frames = self.upsampled_num_frames // self.cfg.downsample_rate
-        label = get_label(
+        label, masks = get_label(
             self.event_df.query("series_id == @series_id").reset_index(drop=True),
             num_frames,
             self.cfg.duration,
@@ -274,6 +300,7 @@ class ValidDataset(Dataset):
             "key": key,
             "feature": feature,  # (num_features, duration)
             "label": torch.FloatTensor(label),  # (duration, num_classes)
+            "masks": torch.FloatTensor(masks),  # (num_tolerances, duration, 2)
         }
 
 
@@ -335,13 +362,11 @@ class SegDataModule(LightningDataModule):
         self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
 
         # train data
-        self.train_chunk_features = load_chunk_features_stride(
-            duration=self.cfg.duration,
+        self.train_raw_features = load_features(
             feature_names=self.cfg.features,
             series_ids=self.train_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
-            stride=cfg.datamodule.train_stride,
         )
 
         # valid data
@@ -352,8 +377,18 @@ class SegDataModule(LightningDataModule):
             processed_dir=self.processed_dir,
             phase="train",
         )
+        self.now_epoch = 0
+
+    def set_now_epoch(self, epoch):
+        self.now_epoch = epoch
 
     def train_dataloader(self):
+        self.train_chunk_features = split_chunk_features_stride(
+            raw_features=self.train_raw_features,
+            duration=self.cfg.duration,
+            stride=self.cfg.datamodule.train_stride,
+            offset=self.now_epoch * self.cfg.datamodule.train_stride // self.cfg.epoch,
+        )
         train_dataset = TrainDataset(
             cfg=self.cfg,
             chunk_features=self.train_chunk_features,

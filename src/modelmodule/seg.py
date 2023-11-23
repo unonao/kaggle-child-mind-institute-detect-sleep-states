@@ -114,6 +114,8 @@ class SegModel(LightningModule):
             self.datamodule.set_sigma(self.datamodule.sigma * self.cfg.sigma_decay)
         if self.cfg.sleep_decay is not None:
             self.model.update_loss_fn(self.cfg.sleep_decay)
+        self.epoch += 1
+        self.datamodule.set_now_epoch(self.epoch)
 
     def on_validation_epoch_end(self):
         keys = []
