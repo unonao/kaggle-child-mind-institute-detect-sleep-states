@@ -198,11 +198,6 @@ class TrainDataset(Dataset):
 
         self.sigma = self.cfg.sigma
 
-        self.now_epoch = 0
-
-    def set_now_epoch(self, epoch):
-        self.now_epoch = epoch
-
     def set_sigma(self, sigma):
         self.sigma = sigma
 
@@ -380,6 +375,11 @@ class SegDataModule(LightningDataModule):
             phase="train",
         )
         self.sigma = cfg.sigma
+
+        self.now_epoch = 0
+
+    def set_now_epoch(self, epoch):
+        self.now_epoch = epoch
 
     def set_sigma(self, sigma):
         self.sigma = sigma

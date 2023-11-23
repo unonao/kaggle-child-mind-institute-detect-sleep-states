@@ -25,6 +25,12 @@ defaults:
   - split@fold_4: stratify_fold_4
   - loss: bce
 
+datamodule:
+  how: random # random, stride, overlap
+  train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
+  overlap: 0 
+  zero_periodicity: false
+
 debug: false
 
 num_fold: 5

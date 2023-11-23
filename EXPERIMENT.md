@@ -142,4 +142,6 @@ python run/cv_train.py exp_name=exp059_no_negative "pos_weight=[1.0, 5.0, 5.0]" 
 
 
 python run/cv_train.py exp_name=exp054_stride "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.how=stride datamodule.train_stride=12000
+
+python run/cv_train.py exp_name=exp054_zero_periodicity "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True
 ```

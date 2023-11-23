@@ -52,6 +52,12 @@ def load_model(cfg: DictConfig, fold: int) -> nn.Module:
 
 def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
     series_ids = cfg[f"fold_{fold}"]["valid_series_ids"]
+
+    # train data
+    periodicity_dict = None
+    if cfg.datamodule.zero_periodicity:
+        periodicity_dict = get_periodicity_dict(cfg)
+
     if cfg.datamodule.how == "overlap":
         chunk_features = load_chunk_features_overlap(
             duration=cfg.duration,
@@ -59,6 +65,7 @@ def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
             series_ids=series_ids,
             processed_dir=Path(cfg.dir.processed_dir),
             phase=cfg.phase,
+            # periodicity_dict=periodicity_dict,
             stride=stride,
             overlap=cfg.datamodule.overlap,
             debug=cfg.debug,
@@ -79,6 +86,7 @@ def get_valid_dataloader(cfg: DictConfig, fold: int, stride: int) -> DataLoader:
             series_ids=series_ids,
             processed_dir=Path(cfg.dir.processed_dir),
             phase=cfg.phase,
+            periodicity_dict=periodicity_dict,
             stride=stride,
             debug=cfg.debug,
         )
@@ -109,6 +117,11 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
     feature_dir = Path(cfg.dir.processed_dir) / cfg.phase
     series_ids = [x.name for x in feature_dir.glob("*")]
 
+    # train data
+    periodicity_dict = None
+    if cfg.datamodule.remove_periodicity:
+        periodicity_dict = get_periodicity_dict(cfg)
+
     if cfg.datamodule.how == "overlap":
         chunk_features = load_chunk_features_overlap(
             duration=cfg.duration,
@@ -116,6 +129,7 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
             series_ids=series_ids,
             processed_dir=Path(cfg.dir.processed_dir),
             phase=cfg.phase,
+            # periodicity_dict=periodicity_dict,
             stride=stride,
             overlap=cfg.datamodule.overlap,
             debug=cfg.debug,
@@ -137,6 +151,7 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
             series_ids=series_ids,
             processed_dir=Path(cfg.dir.processed_dir),
             phase=cfg.phase,
+            periodicity_dict=periodicity_dict,
             stride=stride,
             debug=cfg.debug,
         )

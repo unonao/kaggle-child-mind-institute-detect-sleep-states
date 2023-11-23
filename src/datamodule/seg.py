@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
 
 from src.utils.common import pad_if_needed
+from src.utils.periodicity import get_periodicity_dict
 
 
 ###################
@@ -22,6 +23,7 @@ def load_features(
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
 ) -> dict[str, np.ndarray]:
     features = {}
 
@@ -32,7 +34,12 @@ def load_features(
         series_dir = processed_dir / phase / series_id
         this_feature = []
         for feature_name in feature_names:
-            this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
+
         features[series_dir.name] = np.stack(this_feature, axis=1)
 
     return features
@@ -44,6 +51,7 @@ def load_chunk_features(
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
     stride: int = 0,  # 初期値をstride だけずらしてchunkにする
     debug: bool = False,
 ) -> dict[str, np.ndarray]:
@@ -56,7 +64,12 @@ def load_chunk_features(
         series_dir = processed_dir / phase / series_id
         this_feature = []
         for feature_name in feature_names:
-            this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
+
         this_feature = np.stack(this_feature, axis=1)
         num_chunks = (len(this_feature) // duration) + 1
         this_feature = pad_if_needed(this_feature, stride + num_chunks * duration, pad_value=0)
@@ -195,11 +208,6 @@ class TrainDataset(Dataset):
         )
 
         self.sigma = self.cfg.sigma
-
-        self.now_epoch = 0
-
-    def set_now_epoch(self, epoch):
-        self.now_epoch = epoch
 
     def set_sigma(self, sigma):
         self.sigma = sigma
@@ -357,11 +365,16 @@ class SegDataModule(LightningDataModule):
         self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
 
         # train data
+        periodicity_dict = None
+        if self.cfg.datamodule.zero_periodicity:
+            periodicity_dict = get_periodicity_dict(self.cfg)
+
         self.train_features = load_features(
             feature_names=self.cfg.features,
             series_ids=self.train_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
+            periodicity_dict=periodicity_dict,
         )
 
         # valid data
@@ -371,8 +384,14 @@ class SegDataModule(LightningDataModule):
             series_ids=self.valid_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
+            periodicity_dict=periodicity_dict,
         )
         self.sigma = cfg.sigma
+
+        self.now_epoch = 0
+
+    def set_now_epoch(self, epoch):
+        self.now_epoch = epoch
 
     def set_sigma(self, sigma):
         self.sigma = sigma
