@@ -193,9 +193,9 @@ def inference(
             keys.extend(key)
 
     preds = np.concatenate(preds)
-    if overlap is not None:
-        overlap = overlap if overlap > 0 else None
-        preds = preds[:, overlap:-overlap, :]
+    l = overlap if overlap > 0 else None
+    r = -overlap if overlap > 0 else None
+    preds = preds[:, l:r, :]
     return keys, preds
 
 
