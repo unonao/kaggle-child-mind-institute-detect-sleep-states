@@ -9,6 +9,7 @@ from pytorch_lightning import LightningModule
 from torchvision.transforms.functional import resize
 from transformers import get_cosine_schedule_with_warmup
 import torch.nn as nn
+import math
 
 from src.datamodule.seg import nearest_valid_size
 from src.models.common import get_model
@@ -160,7 +161,13 @@ class SegModel(LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.cfg.optimizer.lr)
+
+        # 1epoch分をwarmupとするための記述
+        num_warmup_steps = (
+            math.ceil(self.trainer.max_steps / self.cfg.epoch) * 1 if self.cfg.scheduler.use_warmup else 0
+        )
+
         scheduler = get_cosine_schedule_with_warmup(
-            optimizer, num_training_steps=self.trainer.max_steps, **self.cfg.scheduler
+            optimizer, num_training_steps=self.trainer.max_steps, num_warmup_steps=num_warmup_steps
         )
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
