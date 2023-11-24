@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 
 class ParticipantVisibleError(Exception):
@@ -26,6 +27,8 @@ tolerances = {
     "onset": [12, 36, 60, 90, 120, 150, 180, 240, 300, 360],
     "wakeup": [12, 36, 60, 90, 120, 150, 180, 240, 300, 360],
 }
+
+commoon_tolerances = [12, 36, 60, 90, 120, 150, 180, 240, 300, 360]
 
 
 def score(
@@ -124,46 +127,51 @@ def event_detection_ap(
     else:
         detections_filtered = detections
 
-    # Create table of event-class x tolerance x series_id values
     aggregation_keys = pd.DataFrame(
-        [
-            (ev, tol, vid)
-            for ev in tolerances.keys()
-            for tol in tolerances[ev]
-            for vid in ground_truths[series_id_column_name].unique()
-        ],
-        columns=[event_column_name, "tolerance", series_id_column_name],
+        [(ev, vid) for ev in tolerances.keys() for vid in ground_truths[series_id_column_name].unique()],
+        columns=[event_column_name, series_id_column_name],
     )
 
-    # Create match evaluation groups: event-class x tolerance x series_id
+    # Create match evaluation groups: event-class x tolerance x series_id → event-class x  series_id
     detections_grouped = aggregation_keys.merge(
         detections_filtered, on=[event_column_name, series_id_column_name], how="left"
-    ).groupby([event_column_name, "tolerance", series_id_column_name])
+    ).groupby([event_column_name, series_id_column_name])
     ground_truths_grouped = aggregation_keys.merge(
         ground_truths, on=[event_column_name, series_id_column_name], how="left"
-    ).groupby([event_column_name, "tolerance", series_id_column_name])
+    ).groupby([event_column_name, series_id_column_name])
 
     # Match detections to ground truth events by evaluation group
     detections_matched = []
-    for key in aggregation_keys.itertuples(index=False):
-        dets = detections_grouped.get_group(key)
+
+    for key, dets in tqdm(
+        detections_grouped, dynamic_ncols=True, leave=False, desc="Matching detections to ground truth events"
+    ):  # get_groupは時間がかかるので要素数の多いやつをfor文で取得
         gts = ground_truths_grouped.get_group(key)
-        detections_matched.append(match_detections(dets["tolerance"].iloc[0], gts, dets))
+        detections_matched.append(match_detections(commoon_tolerances, gts, dets))
+
     detections_matched = pd.concat(detections_matched)
 
-    # Compute AP per event x tolerance group
+    # Compute AP per event
     event_classes = ground_truths[event_column_name].unique()
-    ap_table = (
-        detections_matched.query("event in @event_classes")  # type: ignore
-        .groupby([event_column_name, "tolerance"])
-        .apply(
-            lambda group: average_precision_score_with(
-                group["matched"].to_numpy(),
-                group[score_column_name].to_numpy(),
-                class_counts[group[event_column_name].iat[0]],
+
+    ap_results = []
+    for tol in commoon_tolerances:
+        ap_df = (
+            detections_matched.query("event in @event_classes")
+            .groupby([event_column_name])
+            .apply(
+                lambda group: average_precision_score_with(
+                    group[f"matched_{tol}"].to_numpy(),
+                    group[score_column_name].to_numpy(),
+                    class_counts[group[event_column_name].iat[0]],
+                )
             )
         )
-    )
+        ap_df["tolerance"] = tol
+        ap_results.append(ap_df)
+    ap_table = pd.concat(ap_results)
+    ap_table = ap_table.reset_index(drop=False).set_index([event_column_name, "tolerance"])
+
     # Average over tolerances, then over event classes
     mean_ap = ap_table.groupby(event_column_name)["ap"].mean().sum() / len(event_classes)
 
@@ -173,42 +181,49 @@ def event_detection_ap(
         return mean_ap
 
 
-def find_nearest_time_idx(times, target_time, excluded_indices, tolerance):
+def find_nearest_time_idx(times, target_time, excluded_indices_dict, tolerances):
     """Find the index of the nearest time to the target_time
     that is not in excluded_indices."""
     idx = bisect_left(times, target_time)
 
-    best_idx = None
-    best_error = float("inf")
+    best_idx_dict = dict([(tol, None) for tol in tolerances])
+    best_error_dict = dict([(tol, float("inf")) for tol in tolerances])
 
-    offset_range = min(len(times), tolerance)
+    offset_range = min(len(times), 3)  # 基本的には左右数個のGTを確認すれば十分。本当は1個でも良いはず
     for offset in range(-offset_range, offset_range):  # Check the exact, one before, and one after
         check_idx = idx + offset
-        if 0 <= check_idx < len(times) and check_idx not in excluded_indices:
-            error = abs(times[check_idx] - target_time)
-            if error < best_error:
-                best_error = error
-                best_idx = check_idx
+        if 0 <= check_idx < len(times):
+            for tol in tolerances:
+                if check_idx not in excluded_indices_dict[tol]:
+                    error = abs(times[check_idx] - target_time)
+                    if error < best_error_dict[tol]:
+                        best_error_dict[tol] = error
+                        best_idx_dict[tol] = check_idx
+    return best_idx_dict, best_error_dict
 
-    return best_idx, best_error
 
-
-def match_detections(tolerance: float, ground_truths: pd.DataFrame, detections: pd.DataFrame) -> pd.DataFrame:
+def match_detections(tolerances: list[int], ground_truths: pd.DataFrame, detections: pd.DataFrame) -> pd.DataFrame:
     detections_sorted = detections.sort_values(score_column_name, ascending=False).dropna()
-    is_matched = np.full_like(detections_sorted[event_column_name], False, dtype=bool)
+    is_matched = [
+        np.full_like(detections_sorted[event_column_name], False, dtype=bool) for i in range(len(tolerances))
+    ]
     ground_truths_times = ground_truths.sort_values(time_column_name)[time_column_name].tolist()
-    matched_gt_indices: set[int] = set()
+    matched_gt_indices_dict: dict[int, set[int]] = dict([(tol, set()) for tol in tolerances])
 
     for i, det in enumerate(detections_sorted.itertuples(index=False)):
         det_time = getattr(det, time_column_name)
 
-        best_idx, best_error = find_nearest_time_idx(ground_truths_times, det_time, matched_gt_indices, tolerance)
+        best_idx_dict, best_error_dict = find_nearest_time_idx(
+            ground_truths_times, det_time, matched_gt_indices_dict, tolerances
+        )
 
-        if best_idx is not None and best_error < tolerance:
-            is_matched[i] = True
-            matched_gt_indices.add(best_idx)
+        for ti, tol in enumerate(tolerances):
+            if best_idx_dict[tol] is not None and best_error_dict[tol] < tol:
+                is_matched[ti][i] = True
+                matched_gt_indices_dict[tol].add(best_idx_dict[tol])
 
-    detections_sorted["matched"] = is_matched
+    for ti, tol in enumerate(tolerances):
+        detections_sorted[f"matched_{tol}"] = is_matched[ti]
     return detections_sorted
 
 
