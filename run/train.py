@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 import hydra
-from hydra.plugins.common.utils import HydraConfig
+from hydra.core.hydra_config import HydraConfig
 import torch
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer, seed_everything
@@ -28,6 +28,14 @@ LOGGER = logging.getLogger(Path(__file__).name)
 def main(cfg: DictConfig):  # type: ignore
     seed_everything(cfg.seed)
 
+    job_name = ""
+    print(HydraConfig.get().job)
+    if "num" in HydraConfig.get().job:
+        job_name = str(HydraConfig.get().job.num)
+        print(job_name)
+    else:
+        print("No job name")
+
     # init lightning model
     if cfg.datamodule.how == "random":
         datamodule = SegDataModule(cfg)
@@ -37,14 +45,14 @@ def main(cfg: DictConfig):  # type: ignore
         datamodule = SegDataModuleOverlap(cfg)
 
     LOGGER.info("Set Up DataModule")
-    model = SegModel(cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration)
-
-    job_name = ""
-    if "name" in HydraConfig().hydra.job:
-        job_name = HydraConfig().hydra.job.name
-        print(job_name)
-    else:
-        print("No job name")
+    model = SegModel(
+        cfg,
+        datamodule.valid_event_df,
+        len(cfg.features),
+        len(cfg.labels),
+        cfg.duration,
+        datamodule,
+    )
 
     # set callbacks
     checkpoint_cb = ModelCheckpoint(
@@ -86,19 +94,6 @@ def main(cfg: DictConfig):  # type: ignore
     )
 
     trainer.fit(model, datamodule=datamodule)
-
-    # load best weights
-    model = model.load_from_checkpoint(
-        checkpoint_cb.best_model_path,
-        cfg=cfg,
-        val_event_df=datamodule.valid_event_df,
-        feature_dim=len(cfg.features),
-        num_classes=len(cfg.labels),
-        duration=cfg.duration,
-    )
-    weights_path = str("model_weights.pth")  # type: ignore
-    LOGGER.info(f"Extracting and saving best weights: {weights_path}")
-    torch.save(model.model.state_dict(), weights_path)
 
     return
 

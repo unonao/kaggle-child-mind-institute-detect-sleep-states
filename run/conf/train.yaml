@@ -15,10 +15,17 @@ defaults:
   - model: Spec2DCNN 
   - feature_extractor: CNNSpectrogram
   - decoder: UNet1DDecoder
-  - split: fold_1
+  - split: stratify_fold_1
   - features: base
   - post_process: train
   - ignore: zero
+  - loss: bce
+
+datamodule:
+  how: random # random, stride, overlap
+  train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
+  overlap: 0 
+  zero_periodicity: false
 
 seed: 42
 exp_name: dummy
@@ -43,6 +50,8 @@ check_val_every_n_epoch: 1
 offset: 10
 sigma: 10
 bg_sampling_rate: 0.5
+sigma_decay:  # 0.95
+sleep_decay: # 0.90
 
 # augmentation
 augmentation:
