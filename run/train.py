@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 import hydra
+from hydra.plugins.common.utils import HydraConfig
 import torch
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer, seed_everything
@@ -14,7 +15,10 @@ from pytorch_lightning.callbacks import (
 from pytorch_lightning.loggers import WandbLogger
 
 from src.datamodule.seg import SegDataModule
+from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
+from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
 from src.modelmodule.seg import SegModel
+from src.utils.metrics import event_detection_ap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
 LOGGER = logging.getLogger(Path(__file__).name)
@@ -25,9 +29,22 @@ def main(cfg: DictConfig):  # type: ignore
     seed_everything(cfg.seed)
 
     # init lightning model
-    datamodule = SegDataModule(cfg)
+    if cfg.datamodule.how == "random":
+        datamodule = SegDataModule(cfg)
+    elif cfg.datamodule.how == "stride":
+        datamodule = SegDataModuleStride(cfg)
+    elif cfg.datamodule.how == "overlap":
+        datamodule = SegDataModuleOverlap(cfg)
+
     LOGGER.info("Set Up DataModule")
     model = SegModel(cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration)
+
+    job_name = ""
+    if "name" in HydraConfig().hydra.job:
+        job_name = HydraConfig().hydra.job.name
+        print(job_name)
+    else:
+        print("No job name")
 
     # set callbacks
     checkpoint_cb = ModelCheckpoint(
@@ -43,8 +60,8 @@ def main(cfg: DictConfig):  # type: ignore
 
     # init experiment logger
     pl_logger = WandbLogger(
-        name=cfg.exp_name,
-        project="child-mind-institute-detect-sleep-states",
+        name=cfg.exp_name + "_" + job_name,
+        project="child-mind-institute-detect-sleep-states-single",
     )
 
     trainer = Trainer(
