@@ -144,4 +144,33 @@ python run/cv_train.py exp_name=exp059_no_negative "pos_weight=[1.0, 5.0, 5.0]" 
 python run/cv_train.py exp_name=exp054_stride "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.how=stride datamodule.train_stride=12000
 
 python run/cv_train.py exp_name=exp054_zero_periodicity "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True
+
+python run/cv_train.py exp_name=exp061_split_large_kernel "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True "feature_extractor.kernel_sizes=[128, 32, 16, 4]"
+python run/cv_train.py exp_name=exp062_split_drop "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3
+python run/cv_train.py exp_name=exp065_split_drop "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.5
+
+
+python run/cv_train.py exp_name=exp060_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=6
+python run/cv_train.py exp_name=exp063_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=6 decoder.num_layers=6
+python run/cv_train.py exp_name=exp064_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=4 decoder.num_layers=2
+python run/cv_train.py exp_name=exp066_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=2
+
+# now
+python run/cv_train.py exp_name=exp068_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.3 
+
+
+python run/cv_train.py exp_name=exp069_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 scheduler.use_warmup=True
+python run/cv_train.py exp_name=exp070_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 scheduler.use_warmup=True bg_sampling_rate=0.3
+
+# todo
+
+python run/cv_train.py exp_name=exp071_bg_sampling "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 bg_sampling_rate=0.6
+python run/cv_train.py exp_name=exp072_low_sigma "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 sigma=5
+python run/cv_train.py exp_name=exp078_lstm "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor 
+
+
+python run/cv_train.py exp_name=exp074_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.4 scheduler.use_warmup=True optimizer.lr=0.001
+python run/cv_train.py exp_name=exp075_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.4 scheduler.use_warmup=True optimizer.lr=0.005
+python run/cv_train.py exp_name=exp076_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.2 
+python run/cv_train.py exp_name=exp077_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.3 
 ```
