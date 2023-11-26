@@ -34,6 +34,13 @@ def main(cfg: DictConfig):
     else:
         print("No job name")
 
+    pl_logger = WandbLogger(
+        name=cfg.exp_name + "_" + job_name,
+        project="child-mind-institute-detect-sleep-states-single",
+        reinit=True,
+    )
+    pl_logger.log_hyperparams(cfg)
+
     # init lightning model
     if cfg.datamodule.how == "random":
         datamodule = SegDataModule(cfg)
@@ -62,11 +69,6 @@ def main(cfg: DictConfig):
     lr_monitor = LearningRateMonitor("epoch")
     progress_bar = RichProgressBar()
     model_summary = RichModelSummary(max_depth=2)
-
-    pl_logger = WandbLogger(
-        name=cfg.exp_name + "_" + job_name,
-        project="child-mind-institute-detect-sleep-states-single",
-    )
 
     trainer = Trainer(
         # env

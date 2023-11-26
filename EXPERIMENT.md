@@ -174,9 +174,15 @@ python run/cv_train.py exp_name=exp078_lstm "pos_weight=[1.0, 5.0, 5.0]" batch_s
 
 python run/train.py -m exp_name=lstm_param2 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=32" "feature_extractor.num_layers=3"
 
-python run/train.py -m exp_name=lstm_param3 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=64" "feature_extractor.num_layers=2,3"
+python run/train.py -m exp_name=lstm_param3 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=64" "feature_extractor.num_layers=2"
+
+python run/train.py -m exp_name=lstm_param4 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=64" "feature_extractor.num_layers=3,4"
+
+python run/cv_train.py exp_name=exp079_lstm_64 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=64" "feature_extractor.num_layers=2"
 
 # todo
+
+python run/train.py -m exp_name=lstm_param5 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=128" "feature_extractor.num_layers=2,3,4"
 
 
 python run/train.py -m exp_name=transformer_ "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 optimizer.lr=????? decoder.dropout=?
