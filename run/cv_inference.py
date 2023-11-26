@@ -21,7 +21,7 @@ from src.datamodule.seg_overlap import (
 )
 from src.models.common import get_model
 from src.utils.common import trace
-from src.utils.post_process import post_process_find_peaks
+from src.utils.post_process import post_process_find_peaks, make_submission
 from src.utils.periodicity import get_periodicity_dict
 from src.utils.metrics import event_detection_ap
 import ctypes
@@ -119,7 +119,7 @@ def get_test_dataloader(cfg: DictConfig, stride: int) -> DataLoader:
 
     # train data
     periodicity_dict = None
-    if cfg.datamodule.remove_periodicity:
+    if cfg.datamodule.zero_periodicity:
         periodicity_dict = get_periodicity_dict(cfg)
 
     if cfg.datamodule.how == "overlap":
@@ -281,64 +281,20 @@ def main(cfg: DictConfig):
     gc.collect()
     ctypes.CDLL("libc.so.6").malloc_trim(0)
 
-    if cfg.phase == "train":
-        # スコアリング
-        event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
-        sub_df = post_process_find_peaks(
-            series2preds,
-            score_th=cfg.post_process.score_th,
-            distance=cfg.post_process.distance,
-            periodicity_dict=None,
-        )
-        score = event_detection_ap(
-            event_df.to_pandas(),
-            sub_df.to_pandas(),
-        )
-        print(f"score: {score:.4f}")
-
-        with trace("get periodicity_dict"):
-            periodicity_dict = get_periodicity_dict(cfg)
-        sub_df = post_process_find_peaks(
-            series2preds,
-            score_th=cfg.post_process.score_th,
-            distance=cfg.post_process.distance,
-            periodicity_dict=periodicity_dict,
-        )
-        score = event_detection_ap(
-            event_df.to_pandas(),
-            sub_df.to_pandas(),
-        )
-        print(f"score(remove periodicity): {score:.4f}")
-
-    elif cfg.phase == "test":
-        # make submission
-        with trace("make submission"):
-            if cfg.how_post_process == "peaks":
-                periodicity_dict = None
-                if cfg.post_process.remove_periodicity:
-                    with trace("get periodicity_dict"):
-                        periodicity_dict = get_periodicity_dict(cfg)
-                sub_df = post_process_find_peaks(
-                    series2preds,
-                    score_th=cfg.post_process.score_th,
-                    distance=cfg.post_process.distance,
-                    periodicity_dict=periodicity_dict,
-                )
-        with open(Path(cfg.dir.sub_dir) / "series2preds.pkl", "wb") as f:
-            pickle.dump(series2preds, f)
-        sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
-
-    with trace("load seq_df"):
+    with trace("load seq_df and get unique_series_ids"):
         # 結果をparquetに保存
         if cfg.phase == "train":
-            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id"])
+            seq_df = pl.read_parquet(
+                Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id", "step", "timestamp"]
+            )
         elif cfg.phase == "test":
-            seq_df = pl.read_parquet(Path(cfg.dir.data_dir) / "test_series.parquet", columns=["series_id"])
+            seq_df = pl.read_parquet(
+                Path(cfg.dir.data_dir) / "test_series.parquet", columns=["series_id", "step", "timestamp"]
+            )
         series_count_dict = dict(seq_df.get_column("series_id").value_counts().iter_rows())
         unique_series_ids = (
             seq_df.unique("series_id", keep="first", maintain_order=True).get_column("series_id").to_list()
         )  # 順序を保ったままseries_idを取得
-        del seq_df
         gc.collect()
         ctypes.CDLL("libc.so.6").malloc_trim(0)
 
@@ -353,7 +309,6 @@ def main(cfg: DictConfig):
         del series2preds
         gc.collect()
         ctypes.CDLL("libc.so.6").malloc_trim(0)
-
         pred_df = pl.DataFrame(
             [
                 pl.Series(name="pred_sleep", values=preds_all[:, 0]),
@@ -362,6 +317,59 @@ def main(cfg: DictConfig):
             ]
         )
         pred_df.write_parquet(f"{cfg.phase}_pred.parquet")
+
+    pred_df = pl.concat([seq_df, pred_df], how="horizontal").with_columns(
+        pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")
+    )
+
+    if cfg.phase == "train":
+        # スコアリング
+        event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
+        periodicity_dict = get_periodicity_dict(cfg)
+
+        with trace("make submission"):
+            sub_df = make_submission(
+                pred_df,
+                periodicity_dict=periodicity_dict,
+                height=cfg.post_process.score_th,
+                distance=cfg.post_process.distance,
+                pred_prefix="pred",
+                late_date_rate=1.0,
+            )
+            score = event_detection_ap(
+                event_df.to_pandas(),
+                sub_df.to_pandas(),
+            )
+            print(f"score: {score:.4f}")
+
+        with trace("make submission w/ late_date_rate=0.9"):
+            sub_df = make_submission(
+                pred_df,
+                periodicity_dict=periodicity_dict,
+                height=cfg.post_process.score_th,
+                distance=cfg.post_process.distance,
+                pred_prefix="pred",
+                late_date_rate=0.9,
+            )
+            score = event_detection_ap(
+                event_df.to_pandas(),
+                sub_df.to_pandas(),
+            )
+            print(f"score w/ late_date_rate=0.9: {score:.4f}")
+
+    elif cfg.phase == "test":
+        # make submission
+        with trace("make submission"):
+            periodicity_dict = get_periodicity_dict(cfg)
+            sub_df = make_submission(
+                pred_df,
+                periodicity_dict=periodicity_dict,
+                height=cfg.post_process.score_th,
+                distance=cfg.post_process.distance,
+                pred_prefix="pred",
+                late_date_rate=0.9,
+            )
+        sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
 
 
 if __name__ == "__main__":

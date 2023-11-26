@@ -3,6 +3,7 @@ import polars as pl
 from scipy.signal import find_peaks
 import logging
 from pathlib import Path
+from tqdm.auto import tqdm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
 LOGGER = logging.getLogger(Path(__file__).name)
@@ -256,3 +257,60 @@ def post_process_event_score_normalize_by_day(
     result_event_df = pl.concat(result_event_df_list)
 
     return result_event_df
+
+
+def make_submission(
+    preds_df: pl.DataFrame,
+    periodicity_dict: dict[str, np.ndarray],
+    height: float = 0.001,
+    distance: int = 100,
+    daily_score_offset: float = 1.0,
+    pred_prefix: str = "prediction",  # "pred"
+    late_date_rate=1.0,
+) -> pl.DataFrame:
+    event_dfs = []
+
+    for series_id, series_df in tqdm(
+        preds_df.group_by("series_id"), desc="find peaks", leave=False, total=len(preds_df["series_id"].unique())
+    ):
+        for event in ["onset", "wakeup"]:
+            event_preds = series_df[f"{pred_prefix}_{event}"].to_numpy().copy()
+            event_preds *= 1 - periodicity_dict[series_id][: len(event_preds)]
+            steps = find_peaks(event_preds, height=height, distance=distance)[0]
+            event_dfs.append(
+                series_df.filter(pl.col("step").is_in(steps))
+                .with_columns(pl.lit(event).alias("event"))
+                .rename({f"{pred_prefix}_{event}": "score"})
+                .select(["series_id", "step", "timestamp", "event", "score"])
+            )
+
+    # date 1日ごとにスコアを減衰させる
+
+    submission_df = (
+        pl.concat(event_dfs)
+        .with_columns(pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date"))
+        .with_columns(
+            pl.col("date").min().over("series_id").alias("min_date"),
+            pl.col("date").max().over("series_id").alias("max_date"),
+        )
+        .with_columns(
+            pl.col("score") / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset)
+        )
+        .with_columns(
+            pl.col("score")
+            * (
+                1
+                - (
+                    (1 - pl.lit(late_date_rate))
+                    * (
+                        (pl.col("date") - pl.col("min_date")).dt.days()
+                        / ((pl.col("max_date") - pl.col("min_date")).dt.days() + 1.0)
+                    )
+                )
+            )
+        )
+        .sort(["series_id", "step"])
+        .with_columns(pl.arange(0, pl.count()).alias("row_id"))
+        .select(["row_id", "series_id", "step", "event", "score"])
+    )
+    return submission_df
