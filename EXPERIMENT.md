@@ -167,17 +167,20 @@ python run/cv_train.py exp_name=exp073_sigma8_offset20 "pos_weight=[1.0, 5.0, 5.
 python run/cv_train.py exp_name=exp074_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.4 scheduler.use_warmup=True optimizer.lr=0.001
 python run/cv_train.py exp_name=exp075_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.4 scheduler.use_warmup=True optimizer.lr=0.005
 python run/cv_train.py exp_name=exp076_transformer_warmup "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.2 
-
 python run/train.py -m exp_name=transformer_lr "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.3 "optimizer.lr=0.0001,0.005,0.025"
+python run/train.py -m exp_name=transformer_dropout "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 "decoder.dropout=0.2,0.4"
+
+python run/cv_train.py exp_name=exp078_lstm "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor 
+
+python run/train.py -m exp_name=lstm_param "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor "feature_extractor.hidden_size=32,64" "feature_extractor.num_layers=2,3"
 
 # todo
-python run/train.py -m exp_name=transformer_dropout "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 optimizer.lr=?????"decoder.dropout=0.2,0.3,0.4"
 
-python run/train.py -m exp_name=transformer_ "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 optimizer.lr=?????decoder.dropout=?
+
+python run/train.py -m exp_name=transformer_ "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 optimizer.lr=????? decoder.dropout=?
 
 python run/cv_train.py exp_name=exp073_sigma8 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 sigma=8
 
-python run/cv_train.py exp_name=exp078_lstm "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor 
 
 
 python run/cv_train.py exp_name=exp077_transformer "pos_weight=[1.0, 5.0, 5.0]" batch_size=4 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=50 monitor=val_score monitor_mode=max duration=17280 decoder=TransformerDecoder downsample_rate=2 decoder.num_layers=3 decoder.dropout=0.3 
