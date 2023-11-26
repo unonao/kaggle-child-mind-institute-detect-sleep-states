@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+import wandb
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
@@ -94,7 +95,7 @@ def main(cfg: DictConfig):  # type: ignore
     )
 
     trainer.fit(model, datamodule=datamodule)
-
+    wandb.finish()
     return
 
 
