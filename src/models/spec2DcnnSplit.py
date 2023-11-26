@@ -93,6 +93,11 @@ class Spec2DCNNSplit(nn.Module):
             dict[str, torch.Tensor]: logits (batch_size, n_timesteps, n_classes)
         """
 
+        if do_mixup and labels is not None:
+            x, labels = self.mixup(x, labels)
+        if do_cutmix and labels is not None:
+            x, labels = self.cutmix(x, labels)
+
         x = self.feature_extractor(x)  # (batch_size, n_channels, height, n_timesteps)
         x = self.encoder(x).squeeze(1)  # (batch_size, height, n_timesteps)
         bach_size, height, n_timesteps = x.shape
