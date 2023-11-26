@@ -38,6 +38,7 @@ def main(cfg: DictConfig):
         name=cfg.exp_name + "_" + job_name,
         project="child-mind-institute-detect-sleep-states-single",
         reinit=True,
+        settings=wandb.Settings(start_method="thread"),  # https://github.com/wandb/wandb/issues/1314
     )
     pl_logger.log_hyperparams(cfg)
 
