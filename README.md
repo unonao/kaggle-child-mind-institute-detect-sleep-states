@@ -47,6 +47,13 @@ python -m run.cv_inference exp_name=exp048 model.encoder_weights=null phase=trai
 python run/cv_train.py exp_name=exp054_zero_periodicity "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True # 0.7827
 python run/cv_score.py exp_name=exp054_zero_periodicity post_process.remove_periodicity=true post_process.distance=80 #  0.7840
 python -m run.cv_inference exp_name=exp054_zero_periodicity model.encoder_weights=null phase=train model=Spec2DCNNSplit model.n_split=1  datamodule.zero_periodicity=True duration=17280  batch_size=8 "features=012" num_tta=1 # tta1: 0.7841→0.7840 tta3: score: 0.7848 → 0.7847
+
+python run/cv_train.py exp_name=exp078_lstm "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=012" model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 feature_extractor=LSTMFeatureExtractor 
+python run/cv_score.py exp_name=exp078_lstm post_process.remove_periodicity=true post_process.distance=80 #  0.7840
+
+python -m run.cv_inference exp_name=exp078_lstm model.encoder_weights=null model=Spec2DCNNSplit model.n_split=1  datamodule.zero_periodicity=True duration=17280  batch_size=8 "features=012" feature_extractor=LSTMFeatureExtractor num_tta=3 phase=train # tta1: 0.7889   tta3: score: 0.7910 
+
+
 ``` 
 
 #### inference

@@ -318,9 +318,13 @@ def main(cfg: DictConfig):
         )
         pred_df.write_parquet(f"{cfg.phase}_pred.parquet")
 
-    pred_df = pl.concat([seq_df, pred_df], how="horizontal").with_columns(
-        pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")
-    )
+    with trace("concat preds and seq_df"):
+        pred_df = pl.concat([seq_df, pred_df], how="horizontal").with_columns(
+            pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")
+        )
+        del seq_df
+        gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
     if cfg.phase == "train":
         # スコアリング
@@ -334,28 +338,12 @@ def main(cfg: DictConfig):
                 height=cfg.post_process.score_th,
                 distance=cfg.post_process.distance,
                 pred_prefix="pred",
-                late_date_rate=1.0,
             )
             score = event_detection_ap(
                 event_df.to_pandas(),
                 sub_df.to_pandas(),
             )
             print(f"score: {score:.4f}")
-
-        with trace("make submission w/ late_date_rate=0.9"):
-            sub_df = make_submission(
-                pred_df,
-                periodicity_dict=periodicity_dict,
-                height=cfg.post_process.score_th,
-                distance=cfg.post_process.distance,
-                pred_prefix="pred",
-                late_date_rate=0.9,
-            )
-            score = event_detection_ap(
-                event_df.to_pandas(),
-                sub_df.to_pandas(),
-            )
-            print(f"score w/ late_date_rate=0.9: {score:.4f}")
 
     elif cfg.phase == "test":
         # make submission
@@ -367,7 +355,6 @@ def main(cfg: DictConfig):
                 height=cfg.post_process.score_th,
                 distance=cfg.post_process.distance,
                 pred_prefix="pred",
-                late_date_rate=0.9,
             )
         sub_df.write_csv(Path(cfg.dir.sub_dir) / "submission.csv")
 

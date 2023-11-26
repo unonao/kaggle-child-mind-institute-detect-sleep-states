@@ -264,9 +264,10 @@ def make_submission(
     periodicity_dict: dict[str, np.ndarray],
     height: float = 0.001,
     distance: int = 100,
+    day_norm: bool = False,
     daily_score_offset: float = 1.0,
-    pred_prefix: str = "prediction",  # "pred"
-    late_date_rate=1.0,
+    pred_prefix: str = "prediction",
+    late_date_rate: float | None = None,
 ) -> pl.DataFrame:
     event_dfs = []
 
@@ -284,33 +285,37 @@ def make_submission(
                 .select(["series_id", "step", "timestamp", "event", "score"])
             )
 
-    # date 1日ごとにスコアを減衰させる
-
     submission_df = (
-        pl.concat(event_dfs)
-        .with_columns(pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date"))
-        .with_columns(
-            pl.col("date").min().over("series_id").alias("min_date"),
-            pl.col("date").max().over("series_id").alias("max_date"),
-        )
-        .with_columns(
+        pl.concat(event_dfs).sort(["series_id", "step"]).with_columns(pl.arange(0, pl.count()).alias("row_id"))
+    )
+
+    if day_norm:
+        submission_df = submission_df.with_columns(
+            pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date")
+        ).with_columns(
             pl.col("score") / (pl.col("score").sum().over(["series_id", "event", "date"]) + daily_score_offset)
         )
-        .with_columns(
-            pl.col("score")
-            * (
-                1
-                - (
-                    (1 - pl.lit(late_date_rate))
-                    * (
-                        (pl.col("date") - pl.col("min_date")).dt.days()
-                        / ((pl.col("max_date") - pl.col("min_date")).dt.days() + 1.0)
+
+    if late_date_rate is not None:
+        submission_df = (
+            submission_df.with_columns(pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date"))
+            .with_columns(
+                pl.col("date").min().over("series_id").alias("min_date"),
+                pl.col("date").max().over("series_id").alias("max_date"),
+            )
+            .with_columns(
+                pl.col("score")
+                * (
+                    1
+                    - (
+                        (1 - pl.lit(late_date_rate))
+                        * (
+                            (pl.col("date") - pl.col("min_date")).dt.days()
+                            / ((pl.col("max_date") - pl.col("min_date")).dt.days() + 1.0)
+                        )
                     )
                 )
             )
         )
-        .sort(["series_id", "step"])
-        .with_columns(pl.arange(0, pl.count()).alias("row_id"))
-        .select(["row_id", "series_id", "step", "event", "score"])
-    )
-    return submission_df
+
+    return submission_df.select(["row_id", "series_id", "step", "event", "score"])
