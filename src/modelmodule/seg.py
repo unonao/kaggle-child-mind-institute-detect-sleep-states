@@ -52,8 +52,9 @@ class SegModel(LightningModule):
 
         self.overlap = cfg.datamodule.overlap
 
-        self.averaged_model = None
+        self.model_ema = None
         if self.cfg.averaged_model.how == "ema":
+            print("Using EMA")
             self.model_ema = ModelEmaV2(self.model, self.cfg.averaged_model.ema_decay)
 
     def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> dict[str, Optional[torch.Tensor]]:
@@ -64,6 +65,10 @@ class SegModel(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         return self.__share_step(batch, "val")
+
+    def on_after_backward(self):
+        if self.model_ema is not None:
+            self.model_ema.update(self.model)
 
     def __share_step(self, batch, mode: str) -> torch.Tensor:
         if mode == "train":
@@ -125,9 +130,6 @@ class SegModel(LightningModule):
         if self.cfg.sleep_decay is not None:
             self.model.update_loss_fn(self.cfg.sleep_decay)
         self.epoch += 1
-
-        if self.model_ema is not None:
-            self.model_ema.update(self.model)
 
     def on_validation_epoch_end(self):
         keys = []
