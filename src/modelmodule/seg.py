@@ -16,6 +16,9 @@ from src.models.common import get_model
 from src.utils.metrics import event_detection_ap
 from src.utils.post_process import post_process_for_seg
 from src.utils.periodicity import get_periodicity_dict
+from torch.optim.swa_utils import AveragedModel
+
+from timm.utils import ModelEmaV2
 
 
 class SegModel(LightningModule):
@@ -48,6 +51,10 @@ class SegModel(LightningModule):
         self.epoch = 0
 
         self.overlap = cfg.datamodule.overlap
+
+        self.averaged_model = None
+        if self.cfg.averaged_model.how == "ema":
+            self.model_ema = ModelEmaV2(self.model, self.cfg.averaged_model.ema_decay)
 
     def forward(self, x: torch.Tensor, labels: Optional[torch.Tensor] = None) -> dict[str, Optional[torch.Tensor]]:
         return self.model(x, labels)
@@ -118,6 +125,9 @@ class SegModel(LightningModule):
         if self.cfg.sleep_decay is not None:
             self.model.update_loss_fn(self.cfg.sleep_decay)
         self.epoch += 1
+
+        if self.model_ema is not None:
+            self.model_ema.update(self.model)
 
     def on_validation_epoch_end(self):
         keys = []

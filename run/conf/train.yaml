@@ -33,6 +33,11 @@ duration: 5760 # (1step 5秒なので) duration * 5 = 秒数。 eg) 5760 * 5 = 2
 downsample_rate: 2
 upsample_rate: 1
 
+averaged_model:
+  how: None # ema, avg
+  ema_decay: 0.999
+
+
 # training
 epoch: 50
 batch_size: 32
