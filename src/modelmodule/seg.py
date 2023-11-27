@@ -74,11 +74,15 @@ class SegModel(LightningModule):
         if mode == "train":
             do_mixup = np.random.rand() < self.cfg.augmentation.mixup_prob
             do_cutmix = np.random.rand() < self.cfg.augmentation.cutmix_prob
+            output = self.model(batch["feature"], batch["label"], batch["masks"], do_mixup, do_cutmix)
         elif mode == "val":
             do_mixup = False
             do_cutmix = False
+            if self.model_ema is not None:
+                output = self.model_ema.module(batch["feature"], batch["label"], batch["masks"], do_mixup, do_cutmix)
+            else:
+                output = self.model(batch["feature"], batch["label"], batch["masks"], do_mixup, do_cutmix)
 
-        output = self.model(batch["feature"], batch["label"], batch["masks"], do_mixup, do_cutmix)
         loss: torch.Tensor = output["loss"]
         logits = output["logits"]  # (batch_size, n_timesteps, n_classes)
 
@@ -164,7 +168,8 @@ class SegModel(LightningModule):
             np.save(f"labels{self.postfix}.npy", labels)
             np.save(f"preds{self.postfix}.npy", preds)
             val_pred_df.write_csv(f"val_pred_df{self.postfix}.csv")
-            torch.save(self.model.state_dict(), f"best_model{self.postfix}.pth")
+            model_dict = self.model.state_dict() if self.model_ema is None else self.model_ema.module.state_dict()
+            torch.save(model_dict, f"best_model{self.postfix}.pth")
             print(f"Saved best model {self.__best_score} -> {score}")
             print(f"Saved best model {self.__best_loss} -> {loss}")
             self.__best_score = score
