@@ -20,6 +20,7 @@ from src.models.spec2DcnnAffine import Spec2DCNNAffine
 from src.models.spec2DcnnMinMax import Spec2DCNNMinMax
 from src.models.specWeightAvg import SpecWeightAvg
 from src.models.spec2DcnnOverlap import Spec2DCNNOverlap
+from src.models.centernet import CenterNet
 
 FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
@@ -237,6 +238,17 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
 
+    elif cfg.model.name == "CenterNet":
+        feature_extractor = get_feature_extractor(cfg.feature_extractor, feature_dim, num_timesteps)
+        decoder = get_decoder(cfg.decoder, feature_extractor.height, 6, num_timesteps)
+        model = CenterNet(
+            feature_extractor=feature_extractor,
+            decoder=decoder,
+            in_channels=feature_extractor.out_chans,
+            mixup_alpha=cfg.aug.mixup_alpha,
+            cutmix_alpha=cfg.aug.cutmix_alpha,
+            **cfg.model.params,
+        )
     else:
         raise NotImplementedError
 

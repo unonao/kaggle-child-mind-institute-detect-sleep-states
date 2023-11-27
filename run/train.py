@@ -19,7 +19,7 @@ from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
 from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
 from src.modelmodule.seg import SegModel
-from src.utils.metrics import event_detection_ap
+from src.datamodule.centernet import CenterNetDataModule
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
@@ -43,7 +43,9 @@ def main(cfg: DictConfig):
     pl_logger.log_hyperparams(cfg)
 
     # init lightning model
-    if cfg.datamodule.how == "random":
+    if cfg.model.name == "CenterNet":
+        datamodule = CenterNetDataModule(cfg)
+    elif cfg.datamodule.how == "random":
         datamodule = SegDataModule(cfg)
     elif cfg.datamodule.how == "stride":
         datamodule = SegDataModuleStride(cfg)

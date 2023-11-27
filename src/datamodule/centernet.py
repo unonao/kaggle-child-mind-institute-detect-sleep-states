@@ -1,4 +1,6 @@
 import random
+from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -6,8 +8,11 @@ import polars as pl
 import torch
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
+from pytorch_lightning import LightningDataModule
+from omegaconf import DictConfig
 
-from src.conf import InferenceConfig, TrainConfig
+from src.utils.periodicity import get_periodicity_dict
+
 from src.utils.common import (
     gaussian_label,
     nearest_valid_size,
@@ -15,6 +20,74 @@ from src.utils.common import (
     pad_if_needed,
     random_crop,
 )
+
+
+###################
+# Load Functions
+###################
+def load_features(
+    feature_names: list[str],
+    series_ids: Optional[list[str]],
+    processed_dir: Path,
+    phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
+) -> dict[str, np.ndarray]:
+    features = {}
+
+    if series_ids is None:
+        series_ids = [series_dir.name for series_dir in (processed_dir / phase).glob("*")]
+
+    for series_id in series_ids:
+        series_dir = processed_dir / phase / series_id
+        this_feature = []
+        for feature_name in feature_names:
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
+
+        features[series_dir.name] = np.stack(this_feature, axis=1)
+
+    return features
+
+
+def load_chunk_features(
+    duration: int,
+    feature_names: list[str],
+    series_ids: Optional[list[str]],
+    processed_dir: Path,
+    phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
+    stride: int = 0,  # 初期値をstride だけずらしてchunkにする
+    debug: bool = False,
+) -> dict[str, np.ndarray]:
+    features = {}
+
+    if series_ids is None:
+        series_ids = [series_dir.name for series_dir in (processed_dir / phase).glob("*")]
+
+    for series_id in series_ids:
+        series_dir = processed_dir / phase / series_id
+        this_feature = []
+        for feature_name in feature_names:
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
+
+        this_feature = np.stack(this_feature, axis=1)
+        num_chunks = (len(this_feature) // duration) + 1
+        this_feature = pad_if_needed(this_feature, stride + num_chunks * duration, pad_value=0)
+        for i in range(num_chunks):
+            chunk_feature = this_feature[stride + i * duration : stride + (i + 1) * duration]
+            # chunk_feature = pad_if_needed(chunk_feature, duration, pad_value=0)
+            features[f"{series_id}_{i:07}"] = chunk_feature
+            if debug:
+                break
+
+    return features  # type: ignore
 
 
 ###################
@@ -54,10 +127,10 @@ def get_centernet_label(
     return label
 
 
-class CenterNetTrainDataset(Dataset):
+class TrainDataset(Dataset):
     def __init__(
         self,
-        cfg: TrainConfig,
+        cfg,
         features: dict[str, np.ndarray],
         event_df: pl.DataFrame,
     ):
@@ -70,6 +143,11 @@ class CenterNetTrainDataset(Dataset):
         self.upsampled_num_frames = nearest_valid_size(
             int(self.cfg.duration * self.cfg.upsample_rate), self.cfg.downsample_rate
         )
+
+        self.sigma = self.cfg.sigma
+
+    def set_sigma(self, sigma):
+        self.sigma = sigma
 
     def __len__(self):
         return len(self.event_df)
@@ -118,10 +196,10 @@ class CenterNetTrainDataset(Dataset):
         }
 
 
-class CenterNetValidDataset(Dataset):
+class ValidDataset(Dataset):
     def __init__(
         self,
-        cfg: TrainConfig,
+        cfg,
         chunk_features: dict[str, np.ndarray],
         event_df: pl.DataFrame,
     ):
@@ -171,7 +249,7 @@ class CenterNetValidDataset(Dataset):
 class CenterNetTestDataset(Dataset):
     def __init__(
         self,
-        cfg: InferenceConfig,
+        cfg,
         chunk_features: dict[str, np.ndarray],
     ):
         self.cfg = cfg
@@ -199,3 +277,93 @@ class CenterNetTestDataset(Dataset):
             "key": key,
             "feature": feature,  # (num_features, duration)
         }
+
+
+###################
+# DataModule
+###################
+class CenterNetDataModule(LightningDataModule):
+    def __init__(self, cfg: DictConfig, fold: int | None = None):
+        super().__init__()
+        self.cfg = cfg
+        self.data_dir = Path(cfg.dir.data_dir)
+        self.processed_dir = Path(cfg.dir.processed_dir)
+        self.event_df = pl.read_csv(self.data_dir / "train_events.csv").drop_nulls()
+        self.fold = fold
+
+        if self.fold is None:  # single fold
+            self.train_series_ids = self.cfg.split.train_series_ids
+            self.valid_series_ids = self.cfg.split.valid_series_ids
+        else:
+            self.train_series_ids = self.cfg[f"fold_{fold}"].train_series_ids
+            self.valid_series_ids = self.cfg[f"fold_{fold}"].valid_series_ids
+
+        self.train_event_df = self.event_df.filter(pl.col("series_id").is_in(self.train_series_ids)).filter(
+            ~pl.col("series_id").is_in(self.cfg.ignore.train)
+        )
+        self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
+
+        # train data
+        periodicity_dict = None
+        if self.cfg.datamodule.zero_periodicity:
+            periodicity_dict = get_periodicity_dict(self.cfg)
+
+        self.train_features = load_features(
+            feature_names=self.cfg.features,
+            series_ids=self.train_series_ids,
+            processed_dir=self.processed_dir,
+            phase="train",
+            periodicity_dict=periodicity_dict,
+        )
+
+        # valid data
+        self.valid_chunk_features = load_chunk_features(
+            duration=self.cfg.duration,
+            feature_names=self.cfg.features,
+            series_ids=self.valid_series_ids,
+            processed_dir=self.processed_dir,
+            phase="train",
+            periodicity_dict=periodicity_dict,
+        )
+        self.sigma = cfg.sigma
+
+        self.now_epoch = 0
+
+    def set_now_epoch(self, epoch):
+        self.now_epoch = epoch
+
+    def set_sigma(self, sigma):
+        self.sigma = sigma
+
+    def train_dataloader(self):
+        train_dataset = TrainDataset(
+            cfg=self.cfg,
+            event_df=self.train_event_df,
+            features=self.train_features,
+        )
+        train_dataset.set_sigma(self.sigma)
+        print(f"sigma: {self.sigma}")
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=True,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+            drop_last=True,
+        )
+        return train_loader
+
+    def val_dataloader(self):
+        valid_dataset = ValidDataset(
+            cfg=self.cfg,
+            chunk_features=self.valid_chunk_features,
+            event_df=self.valid_event_df,
+        )
+        valid_loader = torch.utils.data.DataLoader(
+            valid_dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=False,
+            num_workers=self.cfg.num_workers,
+            pin_memory=True,
+        )
+        return valid_loader

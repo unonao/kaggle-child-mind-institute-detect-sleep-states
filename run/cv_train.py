@@ -25,6 +25,7 @@ from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
 from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
 from src.modelmodule.seg import SegModel
+from src.datamodule.centernet import CenterNetDataModule
 from src.utils.metrics import event_detection_ap
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
@@ -45,7 +46,9 @@ def main(cfg: DictConfig):  # type: ignore
     for fold in range(cfg.num_fold):
         LOGGER.info(f"Start Training Fold {fold}")
         # init lightning model
-        if cfg.datamodule.how == "random":
+        if cfg.model.name == "CenterNet":
+            datamodule = CenterNetDataModule(cfg, fold)
+        elif cfg.datamodule.how == "random":
             datamodule = SegDataModule(cfg, fold)
         elif cfg.datamodule.how == "stride":
             datamodule = SegDataModuleStride(cfg, fold)
