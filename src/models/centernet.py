@@ -18,12 +18,8 @@ import torch
 import torch.nn as nn
 
 
-@dataclass
-class ModelOutput:
-    logits: torch.Tensor
-    loss: Optional[torch.Tensor] = None
-    preds: Optional[torch.Tensor] = None
-    labels: Optional[torch.Tensor] = None
+def ModelOutput(logits, loss=None, preds=None, labels=None):
+    return {"logits": logits, "loss": loss, "preds": preds, "labels": labels}
 
 
 class BaseModel(nn.Module):
@@ -34,6 +30,7 @@ class BaseModel(nn.Module):
         self,
         x: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
+        masks=None,
         do_mixup: bool = False,
         do_cutmix: bool = False,
     ) -> ModelOutput:
