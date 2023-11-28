@@ -10,6 +10,7 @@ from scipy.signal import savgol_filter
 
 from src.utils.common import trace
 from src.utils.periodicity import predict_periodicity_v2
+import itertools
 
 SERIES_SCHEMA = {
     "series_id": pl.Utf8,
@@ -48,11 +49,21 @@ FEATURE_NAMES = [
     "anglez_diff_nonzero_5_mean_24h",
     "anglez_diff_nonzero_60_mean_24h",
     "lids_mean_24h",
+    "enmo_12_rolling_mean",
+    "anglez_12_rolling_std",
+    "enmo_12_rolling_std",
+    "enmo_12_rolling_max",
+    "anglez_diff_5min_median",
+    "enmo_clip",
+    "enmo_log",
+]
+"""
     "anglez_abs_diff_var_24h",
     "anglez_diff_nonzero_5_var_24h",
     "anglez_diff_nonzero_60_var_24h",
     "lids_var_24h",
-] + [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
+    [f"{col}_std_diff{step}" for step in rolling_std_steps for col in base_cols]
+"""
 
 ANGLEZ_MEAN = -8.810476
 ANGLEZ_STD = 35.521877
@@ -85,32 +96,6 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             *to_coord(pl.col("timestamp").dt.weekday(), 7, "weekday"),
         )
         .with_columns(
-            # 指定区間左側のstd。null は 0 で埋める
-            [
-                pl.col(col).rolling_std(step, center=False).fill_null(0).alias(f"{col}_std_left{step}")
-                for step in rolling_std_steps
-                for col in base_cols
-            ]
-        )
-        .with_columns(
-            # left をずらして right を作る
-            [
-                pl.col(f"{col}_std_left{step}")
-                .shift_and_fill(periods=-(step - 1), fill_value=0)
-                .alias(f"{col}_std_right{step}")
-                for step in rolling_std_steps
-                for col in base_cols
-            ]
-        )
-        .with_columns(
-            # left と right の差分
-            [
-                (pl.col(f"{col}_std_right{step}") - pl.col(f"{col}_std_left{step}")).alias(f"{col}_std_diff{step}")
-                for step in rolling_std_steps
-                for col in base_cols
-            ]
-        )
-        .with_columns(
             # 一つとなりとの差分
             pl.col("anglez").diff().fill_null(0).alias("anglez_diff"),
             pl.col("enmo").diff().fill_null(0).alias("enmo_diff"),
@@ -137,7 +122,66 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             # 100/ (activity_count + 1)
             (1 / (pl.col("activity_count") + 1)).alias("lids"),
         )
+        .with_columns(
+            *itertools.chain.from_iterable(
+                [
+                    [
+                        pl.col(["enmo"])
+                        .rolling_mean(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_mean"),
+                        pl.col(["anglez", "enmo"])
+                        .rolling_std(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_std"),
+                        pl.col(["enmo"])
+                        .rolling_max(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_max"),
+                    ]
+                    for window_size in [12]
+                ]
+            )
+        )
+        .with_columns(
+            pl.col("anglez")
+            .diff()
+            .abs()
+            .rolling_median(12 * 5, center=True)
+            .fill_null(0.0)
+            .alias("anglez_diff_5min_median"),
+        )
+        .with_columns((pl.col("enmo")).clip_max(7.0).alias("enmo_clip"))
+        .with_columns((pl.col("enmo")).log1p().alias("enmo_log"))
     )
+    """
+        .with_columns(
+            # 指定区間左側のstd。null は 0 で埋める
+            [
+                pl.col(col).rolling_std(step, center=False).fill_null(0).alias(f"{col}_std_left{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+        .with_columns(
+            # left をずらして right を作る
+            [
+                pl.col(f"{col}_std_left{step}")
+                .shift_and_fill(periods=-(step - 1), fill_value=0)
+                .alias(f"{col}_std_right{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+        .with_columns(
+            # left と right の差分
+            [
+                (pl.col(f"{col}_std_right{step}") - pl.col(f"{col}_std_left{step}")).alias(f"{col}_std_diff{step}")
+                for step in rolling_std_steps
+                for col in base_cols
+            ]
+        )
+    """
 
     # 大域特徴
     one_day_steps = 24 * 60 * 60 // 5
@@ -150,6 +194,9 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         pl.col("anglez_diff_nonzero_5").mean().over("group_number").alias("anglez_diff_nonzero_5_mean_24h"),
         pl.col("anglez_diff_nonzero_60").mean().over("group_number").alias("anglez_diff_nonzero_60_mean_24h"),
         pl.col("lids").mean().over("group_number").alias("lids_mean_24h"),
+    )
+    """
+    series_df = series_df.with_columns(
         pl.col("anglez_abs_diff").var().over("group_number").fill_null(0).alias("anglez_abs_diff_var_24h"),
         pl.col("anglez_diff_nonzero_5").var().over("group_number").fill_null(0).alias("anglez_diff_nonzero_5_var_24h"),
         pl.col("anglez_diff_nonzero_60")
@@ -159,6 +206,7 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         .alias("anglez_diff_nonzero_60_var_24h"),
         pl.col("lids").var().over("group_number").fill_null(0).alias("lids_var_24h"),
     )
+    """
 
     return series_df
 
