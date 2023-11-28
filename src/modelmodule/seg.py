@@ -97,11 +97,14 @@ class SegModel(LightningModule):
             )
         elif mode == "val":
             # アップサンプリングやダウンサンプリングで長さが変わっているのでリサイズしてもとに戻す
-            resized_logits = resize(
-                logits.sigmoid().detach().cpu(),
-                size=[self.duration, logits.shape[2]],
-                antialias=False,
-            )
+            if self.cfg.model.name == "CenterNet":
+                resized_logits = self.model._logits_to_proba_per_step(logits, self.duration).detach().cpu()
+            else:
+                resized_logits = resize(
+                    logits.sigmoid().detach().cpu(),
+                    size=[self.duration, logits.shape[2]],
+                    antialias=False,
+                )
             resized_labels = resize(
                 batch["label"].detach().cpu(),
                 size=[self.duration, logits.shape[2]],
