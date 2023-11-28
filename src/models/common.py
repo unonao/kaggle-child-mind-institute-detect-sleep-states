@@ -239,14 +239,14 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
         )
 
     elif cfg.model.name == "CenterNet":
-        feature_extractor = get_feature_extractor(cfg.feature_extractor, feature_dim, num_timesteps)
-        decoder = get_decoder(cfg.decoder, feature_extractor.height, 6, num_timesteps)
+        feature_extractor = get_feature_extractor(cfg, feature_dim, num_timesteps)
+        decoder = get_decoder(cfg, feature_extractor.height, 6, num_timesteps)
         model = CenterNet(
             feature_extractor=feature_extractor,
             decoder=decoder,
             in_channels=feature_extractor.out_chans,
-            mixup_alpha=cfg.aug.mixup_alpha,
-            cutmix_alpha=cfg.aug.cutmix_alpha,
+            mixup_alpha=cfg.augmentation.mixup_alpha,
+            cutmix_alpha=cfg.augmentation.cutmix_alpha,
             **cfg.model.params,
         )
     else:

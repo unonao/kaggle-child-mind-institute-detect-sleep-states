@@ -163,7 +163,7 @@ class TrainDataset(Dataset):
         n_steps = this_feature.shape[0]
 
         # sample background
-        if random.random() < self.cfg.dataset.bg_sampling_rate:
+        if random.random() < self.cfg.bg_sampling_rate:
             pos = negative_sampling(this_event_df, n_steps)
 
         # crop
@@ -185,14 +185,13 @@ class TrainDataset(Dataset):
         # from hard label to gaussian label
         num_frames = self.upsampled_num_frames // self.cfg.downsample_rate
         label = get_centernet_label(this_event_df, num_frames, self.cfg.duration, start, end)
-        label[:, [0, 1]] = gaussian_label(
-            label[:, [0, 1]], offset=self.cfg.dataset.offset, sigma=self.cfg.dataset.sigma
-        )
+        label[:, [0, 1]] = gaussian_label(label[:, [0, 1]], offset=self.cfg.offset, sigma=self.cfg.sigma)
 
         return {
             "series_id": series_id,
             "feature": feature,  # (num_features, upsampled_num_frames)
             "label": torch.FloatTensor(label),  # (pred_length, num_classes)
+            "masks": torch.FloatTensor(0),
         }
 
 
@@ -243,6 +242,7 @@ class ValidDataset(Dataset):
             "key": key,
             "feature": feature,  # (num_features, duration)
             "label": torch.FloatTensor(label),  # (duration, num_classes)
+            "masks": torch.FloatTensor(0),
         }
 
 
