@@ -22,41 +22,72 @@ SERIES_SCHEMA = {
 
 rolling_std_steps = [12, 60, 120, 360]
 base_cols = ["enmo", "anglez"]
+window_sizes = [6, 12]
 
+FEATURE_NAMES = (
+    [
+        "anglez",
+        "enmo",
+        "anglez_diff",
+        "enmo_diff",
+        "anglez_series_norm",
+        "enmo_series_norm",
+        "hour_sin",
+        "hour_cos",
+        "month_sin",
+        "month_cos",
+        "minute_sin",
+        "minute_cos",
+        "minute15_sin",
+        "minute15_cos",
+        "weekday_sin",
+        "weekday_cos",
+        "activity_count",
+        "lids",
+        "anglez_diff_nonzero_5",
+        "anglez_diff_nonzero_60",
+        "anglez_diff_nonzero_5_max",
+        "anglez_diff_nonzero_60_max",
+        "anglez_diff_nonzero_5_std",
+        "anglez_diff_nonzero_60_std",
+        "anglez_abs_diff_mean_24h",
+        "anglez_diff_nonzero_5_mean_24h",
+        "anglez_diff_nonzero_60_mean_24h",
+        "lids_mean_24h",
+        "anglez_diff_5min_median",
+        "enmo_clip",
+        "enmo_log",
+    ]
+    + list(
+        itertools.chain.from_iterable(
+            [
+                [
+                    f"enmo_{window_size}_rolling_mean",
+                    f"enmo_log_{window_size}_rolling_mean",
+                    f"anglez_{window_size}_rolling_std",
+                    f"enmo_{window_size}_rolling_std",
+                    f"enmo_log_{window_size}_rolling_std",
+                    f"enmo_{window_size}_rolling_max",
+                    f"enmo_log_{window_size}_rolling_max",
+                ]
+                for window_size in window_sizes
+            ]
+        )
+    )
+    + list(
+        itertools.chain.from_iterable(
+            [
+                [
+                    f"anglez_diff_nonzero_{minute}",
+                    f"anglez_diff_nonzero_{minute}_max",
+                    f"anglez_diff_nonzero_{minute}_std",
+                ]
+                for minute in [1, 5, 60]
+            ]
+        )
+    )
+)
 
-FEATURE_NAMES = [
-    "anglez",
-    "enmo",
-    "anglez_diff",
-    "enmo_diff",
-    "anglez_series_norm",
-    "enmo_series_norm",
-    "hour_sin",
-    "hour_cos",
-    "month_sin",
-    "month_cos",
-    "minute_sin",
-    "minute_cos",
-    "minute15_sin",
-    "minute15_cos",
-    "weekday_sin",
-    "weekday_cos",
-    "activity_count",
-    "lids",
-    "anglez_diff_nonzero_5",
-    "anglez_diff_nonzero_60",
-    "anglez_abs_diff_mean_24h",
-    "anglez_diff_nonzero_5_mean_24h",
-    "anglez_diff_nonzero_60_mean_24h",
-    "lids_mean_24h",
-    "enmo_12_rolling_mean",
-    "anglez_12_rolling_std",
-    "enmo_12_rolling_std",
-    "enmo_12_rolling_max",
-    "anglez_diff_5min_median",
-    "enmo_clip",
-    "enmo_log",
-]
 """
     "anglez_abs_diff_var_24h",
     "anglez_diff_nonzero_5_var_24h",
@@ -103,12 +134,22 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             (pl.col("anglez_raw").diff(1).fill_null(0).abs() < 0.1).cast(pl.Float32).alias("anglez_diff_nonzero"),
         )
         .with_columns(
-            pl.col("anglez_diff_nonzero")
-            .rolling_mean(5 * 60 // 5, center=True, min_periods=1)
-            .alias("anglez_diff_nonzero_5"),
-            pl.col("anglez_diff_nonzero")
-            .rolling_mean(60 * 60 // 5, center=True, min_periods=1)
-            .alias("anglez_diff_nonzero_60"),
+            *itertools.chain.from_iterable(
+                [
+                    [
+                        pl.col("anglez_diff_nonzero")
+                        .rolling_mean(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_diff_nonzero_{minute}"),
+                        pl.col("anglez_diff_nonzero")
+                        .rolling_max(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_diff_nonzero_{minute}_max"),
+                        pl.col("anglez_diff_nonzero")
+                        .rolling_std(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_diff_nonzero_{minute}_std"),
+                    ]
+                    for minute in [1, 5, 60]
+                ]
+            )
         )
         .with_columns(
             # 10 minute moving sum over max(0, enmo - 0.02), then smoothed using moving average over a 30-min window
@@ -123,27 +164,6 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             (1 / (pl.col("activity_count") + 1)).alias("lids"),
         )
         .with_columns(
-            *itertools.chain.from_iterable(
-                [
-                    [
-                        pl.col(["enmo"])
-                        .rolling_mean(window_size, center=True)
-                        .fill_null(0.0)
-                        .suffix(f"_{window_size}_rolling_mean"),
-                        pl.col(["anglez", "enmo"])
-                        .rolling_std(window_size, center=True)
-                        .fill_null(0.0)
-                        .suffix(f"_{window_size}_rolling_std"),
-                        pl.col(["enmo"])
-                        .rolling_max(window_size, center=True)
-                        .fill_null(0.0)
-                        .suffix(f"_{window_size}_rolling_max"),
-                    ]
-                    for window_size in [12]
-                ]
-            )
-        )
-        .with_columns(
             pl.col("anglez")
             .diff()
             .abs()
@@ -153,6 +173,27 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         )
         .with_columns((pl.col("enmo")).clip_max(7.0).alias("enmo_clip"))
         .with_columns((pl.col("enmo")).log1p().alias("enmo_log"))
+        .with_columns(
+            *itertools.chain.from_iterable(
+                [
+                    [
+                        pl.col(["enmo", "enmo_log"])
+                        .rolling_mean(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_mean"),
+                        pl.col(["anglez", "enmo", "enmo_log"])
+                        .rolling_std(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_std"),
+                        pl.col(["enmo", "enmo_log"])
+                        .rolling_max(window_size, center=True)
+                        .fill_null(0.0)
+                        .suffix(f"_{window_size}_rolling_max"),
+                    ]
+                    for window_size in window_sizes
+                ]
+            )
+        )
     )
     """
         .with_columns(
