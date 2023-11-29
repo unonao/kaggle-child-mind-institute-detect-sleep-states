@@ -30,6 +30,7 @@ datamodule:
   train_stride: 3600 # 3h=2160, 5h=3600, 8h=5760
   overlap: 0 
   zero_periodicity: false
+  max_label_smoothing: 1.0
 
 num_fold: 5
 

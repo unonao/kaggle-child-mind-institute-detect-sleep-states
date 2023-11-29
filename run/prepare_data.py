@@ -11,6 +11,8 @@ from scipy.signal import savgol_filter
 from src.utils.common import trace
 from src.utils.periodicity import predict_periodicity_v2
 import itertools
+from sklearn.preprocessing import StandardScaler
+from cuml.decomposition import PCA
 
 SERIES_SCHEMA = {
     "series_id": pl.Utf8,
@@ -23,6 +25,7 @@ SERIES_SCHEMA = {
 rolling_std_steps = [12, 60, 120, 360]
 base_cols = ["enmo", "anglez"]
 window_sizes = [6, 12]
+n_pca = 0
 
 FEATURE_NAMES = (
     [
@@ -44,12 +47,6 @@ FEATURE_NAMES = (
         "weekday_cos",
         "activity_count",
         "lids",
-        "anglez_diff_nonzero_5",
-        "anglez_diff_nonzero_60",
-        "anglez_diff_nonzero_5_max",
-        "anglez_diff_nonzero_60_max",
-        "anglez_diff_nonzero_5_std",
-        "anglez_diff_nonzero_60_std",
         "anglez_abs_diff_mean_24h",
         "anglez_diff_nonzero_5_mean_24h",
         "anglez_diff_nonzero_60_mean_24h",
@@ -87,6 +84,8 @@ FEATURE_NAMES = (
         )
     )
 )
+
+PCA_FEATURE_NAMES = [f"pca_{i}" for i in range(n_pca)]
 
 """
     "anglez_abs_diff_var_24h",
@@ -249,6 +248,15 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
     )
     """
 
+    if n_pca > 0:
+        # PCA
+        pca = PCA(n_components=n_pca, random_state=42)
+        scaler = StandardScaler()
+        feat = series_df.select(FEATURE_NAMES).to_numpy()
+        feat = scaler.fit_transform(feat)
+        pca_feat = pca.fit_transform(feat)
+        series_df = series_df.with_columns([pl.Series(pca_feat[:, i]).alias(f"pca_{i}") for i in range(n_pca)])
+
     return series_df
 
 
@@ -324,7 +332,7 @@ def main(cfg: DictConfig):
 
             # 特徴量をそれぞれnpyで保存
             series_dir = processed_dir / series_id  # type: ignore
-            save_each_series(cfg, this_series_df, FEATURE_NAMES, series_dir)
+            save_each_series(cfg, this_series_df, FEATURE_NAMES + PCA_FEATURE_NAMES, series_dir)
 
 
 if __name__ == "__main__":

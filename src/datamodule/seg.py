@@ -248,6 +248,9 @@ class TrainDataset(Dataset):
             label[:, [1, 2]], offset=self.cfg.offset, sigma=self.sigma
         )  # onset, wakeup のみハードラベルなのでガウシアンラベルに変換
 
+        # 最大値が　cfg.datamodule.max_label_smoothing までになるようにminを取る
+        label = np.minimum(label, self.cfg.datamodule.max_label_smoothing)
+
         return {
             "series_id": series_id,
             "feature": feature,  # (num_features, upsampled_num_frames)

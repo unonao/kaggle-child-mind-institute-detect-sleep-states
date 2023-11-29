@@ -14,6 +14,7 @@ from src.models.loss.bce import BCEWithLogitsLoss
 from src.models.loss.tolerance_nonzero import ToleranceNonZeroLoss
 from src.models.loss.focal import FocalLoss
 from src.models.loss.focal_bce import FocalBCELoss
+from src.models.loss.bi_tempered import BiTemperedLogisticLoss
 
 
 class Spec2DCNNSplit(nn.Module):
@@ -71,6 +72,12 @@ class Spec2DCNNSplit(nn.Module):
                 alpha=self.cfg.loss.alpha,
                 gamma=self.cfg.loss.gamma,
                 weight=torch.tensor(self.cfg.loss.weight),
+            )
+        elif self.cfg.loss.name == "bi_tempered":
+            self.loss_fn = BiTemperedLogisticLoss(
+                t1=self.cfg.loss.t1,
+                t2=self.cfg.loss.t2,
+                label_smoothing=self.cfg.loss.label_smoothing,
             )
         else:
             self.loss_fn = BCEWithLogitsLoss(weight=self.label_weight, pos_weight=self.pos_weight)
