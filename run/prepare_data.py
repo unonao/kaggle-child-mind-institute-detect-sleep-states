@@ -75,6 +75,10 @@ FEATURE_NAMES = (
         itertools.chain.from_iterable(
             [
                 [
+                    f"anglez_abs_diff_{minute}_median",
+                    f"anglez_abs_diff_{minute}_std",
+                    f"anglez_abs_diff_{minute}_mean",
+                    f"anglez_abs_diff_{minute}_max",
                     f"anglez_diff_nonzero_{minute}",
                     f"anglez_diff_nonzero_{minute}_max",
                     f"anglez_diff_nonzero_{minute}_std",
@@ -131,6 +135,27 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
             pl.col("enmo").diff().fill_null(0).alias("enmo_diff"),
             pl.col("anglez").diff(1).fill_null(0).abs().alias("anglez_abs_diff"),
             (pl.col("anglez_raw").diff(1).fill_null(0).abs() < 0.1).cast(pl.Float32).alias("anglez_diff_nonzero"),
+        )
+        .with_columns(
+            *itertools.chain.from_iterable(
+                [
+                    [
+                        pl.col("anglez")
+                        .rolling_median(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_abs_diff_{minute}_median"),
+                        pl.col("anglez")
+                        .rolling_std(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_abs_diff_{minute}_std"),
+                        pl.col("anglez")
+                        .rolling_mean(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_abs_diff_{minute}_mean"),
+                        pl.col("anglez")
+                        .rolling_max(minute * 60 // 5, center=True, min_periods=1)
+                        .alias(f"anglez_abs_diff_{minute}_max"),
+                    ]
+                    for minute in [1, 5, 60]
+                ]
+            )
         )
         .with_columns(
             *itertools.chain.from_iterable(
