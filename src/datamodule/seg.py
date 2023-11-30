@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
-
+import pickle
 from src.utils.common import pad_if_needed
 from src.utils.periodicity import get_periodicity_dict
 
@@ -196,6 +196,7 @@ class TrainDataset(Dataset):
         cfg: DictConfig,
         event_df: pl.DataFrame,
         features: dict[str, np.ndarray],
+        fold: int | None = None,
     ):
         self.cfg = cfg
         self.event_df: pd.DataFrame = (
@@ -208,9 +209,22 @@ class TrainDataset(Dataset):
         )
 
         self.sigma = self.cfg.sigma
+        self.epoch = 0
+        self.fold = fold
+        self.train_series2preds = None
 
     def set_sigma(self, sigma):
         self.sigma = sigma
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
+        print(f"epoch: {self.epoch}")
+        if self.cfg.label_correct.use and self.train_series2preds is None:
+            if self.epoch > self.cfg.label_correct.save_epoch:
+                suffix = f"_fold{self.fold}" if self.fold is not None else ""
+                print(f"series2preds{suffix}.pickle")
+                with open(f"series2preds{suffix}.pickle", "rb") as f:
+                    self.train_series2preds = pickle.load(f)
 
     def __len__(self):
         return len(self.event_df)
@@ -250,6 +264,13 @@ class TrainDataset(Dataset):
 
         # 最大値が　cfg.datamodule.max_label_smoothing までになるようにminを取る
         label = np.minimum(label, self.cfg.datamodule.max_label_smoothing)
+
+        # label correction (maxを取る)
+        if self.train_series2preds is not None:
+            pstart = int(start / self.cfg.duration * num_frames)
+            pend = pstart + num_frames
+            preds = self.train_series2preds[series_id]
+            label = np.maximum(label, preds[pstart:pend])
 
         return {
             "series_id": series_id,
@@ -404,9 +425,11 @@ class SegDataModule(LightningDataModule):
             cfg=self.cfg,
             event_df=self.train_event_df,
             features=self.train_features,
+            fold=self.fold,
         )
         train_dataset.set_sigma(self.sigma)
-        print(f"sigma: {self.sigma}")
+        train_dataset.set_epoch(self.now_epoch)
+        print(f"sigma: {self.sigma}, epoch: {self.now_epoch}")
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.cfg.batch_size,

@@ -38,6 +38,11 @@ averaged_model:
   how: None # ema, avg
   ema_decay: 0.999
 
+label_correct:
+  use: false
+  save_epoch: 0
+  pred_threshold: 0.5
+  pred_rate: 1.0
 
 # training
 epoch: 50
