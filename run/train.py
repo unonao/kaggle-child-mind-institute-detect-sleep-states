@@ -92,6 +92,7 @@ def main(cfg: DictConfig):
         log_every_n_steps=int(len(datamodule.train_dataloader()) * 0.1),
         sync_batchnorm=True,
         check_val_every_n_epoch=cfg.check_val_every_n_epoch,
+        reload_dataloaders_every_n_epochs=1,
     )
 
     trainer.fit(model, datamodule=datamodule)

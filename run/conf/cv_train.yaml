@@ -32,6 +32,12 @@ datamodule:
   zero_periodicity: false
   max_label_smoothing: 1.0
 
+label_correct:
+  use: false
+  save_epoch: 0
+  pred_threshold: 0.5
+  pred_rate: 1.0
+  
 num_fold: 5
 
 seed: 42

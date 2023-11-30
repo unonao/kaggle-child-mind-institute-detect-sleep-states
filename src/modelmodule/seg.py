@@ -1,4 +1,5 @@
 from typing import Optional
+from pathlib import Path
 
 import numpy as np
 import polars as pl
@@ -10,15 +11,107 @@ from torchvision.transforms.functional import resize
 from transformers import get_cosine_schedule_with_warmup
 import torch.nn as nn
 import math
-
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 from src.datamodule.seg import nearest_valid_size
 from src.models.common import get_model
 from src.utils.metrics import event_detection_ap
 from src.utils.post_process import post_process_for_seg
 from src.utils.periodicity import get_periodicity_dict
-from torch.optim.swa_utils import AveragedModel
-
+import pickle
+from src.datamodule.seg import TestDataset, load_chunk_features, nearest_valid_size
+from src.datamodule.seg_overlap import (
+    TestDataset as TestDatasetOverlap,
+    load_chunk_features as load_chunk_features_overlap,
+)
 from timm.utils import ModelEmaV2
+
+
+def get_train_dataloader(cfg: DictConfig, fold: int | None, stride: int = 0) -> DataLoader:
+    split = "fold_{}".format(fold) if fold is not None else "split"
+    print(f"32:{fold}", split)
+
+    series_ids = cfg[split]["train_series_ids"]
+
+    # train data
+    periodicity_dict = None
+    if cfg.datamodule.zero_periodicity:
+        periodicity_dict = get_periodicity_dict(cfg)
+
+    if cfg.datamodule.how == "overlap":
+        chunk_features = load_chunk_features_overlap(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase="train",
+            # periodicity_dict=periodicity_dict,
+            stride=stride,
+            overlap=cfg.datamodule.overlap,
+            debug=cfg.debug,
+        )
+        valid_dataset = TestDatasetOverlap(cfg, chunk_features=chunk_features)
+        valid_dataloader = DataLoader(
+            valid_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
+    else:
+        chunk_features = load_chunk_features(
+            duration=cfg.duration,
+            feature_names=cfg.features,
+            series_ids=series_ids,
+            processed_dir=Path(cfg.dir.processed_dir),
+            phase="train",
+            periodicity_dict=periodicity_dict,
+            stride=stride,
+            debug=cfg.debug,
+        )
+        valid_dataset = TestDataset(cfg, chunk_features=chunk_features)
+        valid_dataloader = DataLoader(
+            valid_dataset,
+            batch_size=cfg.batch_size,
+            shuffle=False,
+            num_workers=cfg.num_workers,
+            pin_memory=True,
+            drop_last=False,
+        )
+    return valid_dataloader, series_ids
+
+
+def inference(
+    duration: int, loader: DataLoader, model: nn.Module, device: torch.device, use_amp, overlap: int | None = None
+) -> tuple[list[str], np.ndarray]:
+    model = model.to(device)
+    model.eval()
+
+    preds = []
+    keys = []
+    for batch in tqdm(loader, desc="inference"):
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=use_amp):
+                x = batch["feature"].to(device)
+                pred = model(x)["logits"].sigmoid()
+                """
+                pred = resize(
+                    pred.detach().cpu(),
+                    size=[duration, pred.shape[2]],
+                    antialias=False,
+                )
+                """
+            key = batch["key"]
+            preds.append(pred.detach().cpu().numpy())
+            keys.extend(key)
+
+    preds = np.concatenate(preds)
+    l = overlap if overlap > 0 else None
+    r = -overlap if overlap > 0 else None
+    preds = preds[:, l:r, :]
+    model.train()
+    return keys, preds
 
 
 class SegModel(LightningModule):
@@ -49,6 +142,8 @@ class SegModel(LightningModule):
         self.__best_score = 0.0
         self.datamodule = datamodule
         self.epoch = 0
+        self.fold = fold
+        print(f"142:{fold} {self.fold}")
 
         self.overlap = cfg.datamodule.overlap
 
@@ -129,14 +224,40 @@ class SegModel(LightningModule):
 
         return loss
 
+    def save_train_pred(self):
+        dataloader, unique_series_ids = get_train_dataloader(self.cfg, self.fold)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        keys, preds = inference(
+            self.cfg.duration,
+            dataloader,
+            self.model,
+            device,
+            use_amp=self.cfg.use_amp,
+            overlap=self.cfg.datamodule.overlap,
+        )
+        series2preds = {}
+        series_ids = np.array(list(map(lambda x: x.split("_")[0], keys)))
+        for series_id in unique_series_ids:
+            series_idx = np.where(series_ids == series_id)[0]
+            this_series_preds = preds[series_idx].reshape(-1, 3)
+            # 閾値以下を0にする
+            this_series_preds[this_series_preds < self.cfg.label_correct.pred_threshold] = 0.0
+            series2preds[series_id] = this_series_preds * self.cfg.label_correct.pred_rate
+        with open(f"series2preds{self.postfix}.pickle", "wb") as f:
+            pickle.dump(series2preds, f)
+
     def on_train_epoch_end(self):
+        if self.cfg.label_correct.use:
+            if self.epoch == self.cfg.label_correct.save_epoch:
+                self.save_train_pred()
+
+        self.epoch += 1
         if self.datamodule is not None:
             self.datamodule.set_now_epoch(self.epoch)
             if self.cfg.sigma_decay is not None:
                 self.datamodule.set_sigma(self.datamodule.sigma * self.cfg.sigma_decay)
         if self.cfg.sleep_decay is not None:
             self.model.update_loss_fn(self.cfg.sleep_decay)
-        self.epoch += 1
 
     def on_validation_epoch_end(self):
         keys = []
@@ -148,8 +269,6 @@ class SegModel(LightningModule):
         preds = np.concatenate([x[2][:, l:r, :] for x in self.validation_step_outputs])
         losses = np.array([x[3] for x in self.validation_step_outputs])
         loss = losses.mean()
-
-        print(preds.shape)
 
         periodicity_dict = get_periodicity_dict(self.cfg)
         val_pred_df = post_process_for_seg(
