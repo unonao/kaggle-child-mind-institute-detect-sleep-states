@@ -39,7 +39,9 @@ def main(cfg: DictConfig):  # type: ignore
     # init experiment logger
     pl_logger = WandbLogger(
         name=cfg.exp_name,
-        project="child-mind-institute-detect-sleep-states-v2",
+        project="child-mind-institute-detect-sleep-states-v2"
+        if cfg.num_fold == 5
+        else "child-mind-institute-detect-sleep-states-v2-10fold",
     )
     pl_logger.log_hyperparams(cfg)
 

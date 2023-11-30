@@ -20,6 +20,11 @@ defaults:
   - split@fold_2: stratify_fold_2
   - split@fold_3: stratify_fold_3
   - split@fold_4: stratify_fold_4
+  - split@fold_5:
+  - split@fold_6:
+  - split@fold_7:
+  - split@fold_8:
+  - split@fold_9:
   - features: base
   - post_process: train
   - ignore: zero
