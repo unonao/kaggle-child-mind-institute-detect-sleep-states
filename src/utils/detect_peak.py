@@ -8,9 +8,11 @@ def post_process_from_2nd(
     event_rate: int | float = 0.005,
     height: float = 0.1,
     event2col: dict[str, str] = {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"},
+    weight_rate: float | None = None,
 ):
     """
     1分ごとの予測値を用いてイベントを検出する
+    # TODO: 1段目のモデルを入れる場合は1分ごとの予測値をそのまま使わずに周辺の予測値をrollする方が良さそう？
 
     用語
     - 予測地点: 2段目のモデルによって得られた1分毎の予測位置
@@ -25,7 +27,9 @@ def post_process_from_2nd(
     """
     high_match_nums = [1, 3, 5, 8, 10, 13, 15, 20, 25, 30]
     low_match_nums = [1, 3, 5, 7, 10, 12, 15, 20, 25, 30]
-    # match_sums = [2, 6, 10, 15, 20, 25, 30, 40, 50, 60]
+    match_sums = [np.power(weight_rate, i) for i in range(10)] if weight_rate else np.ones(10)
+    # match_sums = [1.0+weight_rate*i for i in range(10)] if weight_rate else np.ones(10)
+    total_num = sum(high_match_nums + low_match_nums)
     # total_num = sum(high_match_nums + low_match_nums)
     result_events_records = []
 
@@ -65,8 +69,9 @@ def post_process_from_2nd(
                         pl.col(event_pred_col)
                         .rolling_sum(window_size=window, center=False, min_periods=1)
                         .over(["series_id", "chunk_id"])
+                        / match_sums[i]
                     )
-                    for window in high_match_nums
+                    for i, window in enumerate(high_match_nums)
                 ]
             ).alias(f"{event}_left_expectation_plus_3step"),
             pl.sum_horizontal(
@@ -75,8 +80,9 @@ def post_process_from_2nd(
                         pl.col(event_pred_col)
                         .rolling_sum(window_size=window, center=False, min_periods=1)
                         .over(["series_id", "chunk_id"])
+                        / match_sums[i]
                     )
-                    for window in low_match_nums
+                    for i, window in enumerate(low_match_nums)
                 ]
             ).alias(f"{event}_left_expectation_plus_9step"),
         )
@@ -92,8 +98,9 @@ def post_process_from_2nd(
                         .rolling_sum(window_size=window, center=False, min_periods=1)
                         .over(["series_id", "chunk_id"])
                         .fill_null(0)
+                        / match_sums[i]
                     )
-                    for window in low_match_nums
+                    for i, window in enumerate(low_match_nums)
                 ]
             ).alias(f"{event}_right_expectation_plus_3step"),
             pl.sum_horizontal(
@@ -104,8 +111,9 @@ def post_process_from_2nd(
                         .rolling_sum(window_size=window, center=False, min_periods=1)
                         .over(["series_id", "chunk_id"])
                         .fill_null(0)
+                        / match_sums[i]
                     )
-                    for window in high_match_nums
+                    for i, window in enumerate(high_match_nums)
                 ]
             ).alias(f"{event}_right_expectation_plus_9step"),
         )
@@ -276,7 +284,7 @@ def post_process_from_2nd(
                         right_diff_max = right_nums[pi]
                         expectation_sum_3step[
                             max(si - left_diff_max, step_min) : min(si + right_diff_max, step_max)
-                        ] -= pred
+                        ] -= pred / match_sums[pi - 1]
                         """
                         if ((si-left_diff_max <= max_step_index) and (max_step_index < si+right_diff_max)):
                             print(f'3step pi:{pi}')
@@ -293,7 +301,7 @@ def post_process_from_2nd(
                         right_diff_max = right_nums[pi]
                         expectation_sum_9step[
                             max(si - left_diff_max, step_min) : min(si + right_diff_max, step_max)
-                        ] -= pred
+                        ] -= pred / match_sums[pi - 1]
                         """
                         if ((si-left_diff_max <= max_step_index) and (max_step_index < si+right_diff_max)):
                             print(f'9step pi:{pi}')

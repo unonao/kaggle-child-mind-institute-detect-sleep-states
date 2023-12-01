@@ -89,6 +89,11 @@ FEATURE_NAMES = (
     )
 )
 
+CATEGORICAL_FEATURE_NAMES = [
+    "hour",
+    "minute_15",
+]
+
 PCA_FEATURE_NAMES = [f"pca_{i}" for i in range(n_pca)]
 
 """
@@ -282,6 +287,12 @@ def add_feature(series_df: pl.DataFrame) -> pl.DataFrame:
         pca_feat = pca.fit_transform(feat)
         series_df = series_df.with_columns([pl.Series(pca_feat[:, i]).alias(f"pca_{i}") for i in range(n_pca)])
 
+    # categorical
+    series_df = series_df.with_columns(
+        pl.col("timestamp").dt.hour().alias("hour"),
+        (pl.col("timestamp").dt.minute() % 15).alias("minute_15"),
+    )
+
     return series_df
 
 
@@ -357,7 +368,9 @@ def main(cfg: DictConfig):
 
             # 特徴量をそれぞれnpyで保存
             series_dir = processed_dir / series_id  # type: ignore
-            save_each_series(cfg, this_series_df, FEATURE_NAMES + PCA_FEATURE_NAMES, series_dir)
+            save_each_series(
+                cfg, this_series_df, FEATURE_NAMES + PCA_FEATURE_NAMES + CATEGORICAL_FEATURE_NAMES, series_dir
+            )
 
 
 if __name__ == "__main__":

@@ -21,6 +21,7 @@ from src.models.spec2DcnnMinMax import Spec2DCNNMinMax
 from src.models.specWeightAvg import SpecWeightAvg
 from src.models.spec2DcnnOverlap import Spec2DCNNOverlap
 from src.models.centernet import CenterNet
+from src.models.spec2DcnnSplitCat import Spec2DCNNSplitCat
 
 FEATURE_EXTRACTORS = Union[CNNSpectrogram, PANNsFeatureExtractor, LSTMFeatureExtractor, SpecFeatureExtractor]
 DECODERS = Union[UNet1DDecoder, LSTMDecoder, TransformerDecoder, MLPDecoder]
@@ -248,6 +249,22 @@ def get_model(cfg: DictConfig, feature_dim: int, n_classes: int, num_timesteps: 
             mixup_alpha=cfg.augmentation.mixup_alpha,
             cutmix_alpha=cfg.augmentation.cutmix_alpha,
             **cfg.model.params,
+        )
+    elif cfg.model.name == "Spec2DCNNSplitCat":
+        cat_dims = sum([feat_dict["dim"] for feat_dict in cfg.cat_features.values()])
+        feature_extractor = get_feature_extractor(cfg, feature_dim + cat_dims, num_timesteps)
+        decoder = get_decoder(
+            cfg, feature_extractor.height * (cfg.model.n_split + 1), n_classes, num_timesteps // (2**cfg.model.n_split)
+        )
+        model = Spec2DCNNSplitCat(
+            cfg=cfg,
+            feature_extractor=feature_extractor,
+            decoder=decoder,
+            encoder_name=cfg.model.encoder_name,
+            in_channels=feature_extractor.out_chans,
+            encoder_weights=cfg.model.encoder_weights,
+            mixup_alpha=cfg.augmentation.mixup_alpha,
+            cutmix_alpha=cfg.augmentation.cutmix_alpha,
         )
     else:
         raise NotImplementedError

@@ -18,8 +18,11 @@ from pytorch_lightning.loggers import WandbLogger
 from src.datamodule.seg import SegDataModule
 from src.datamodule.seg_stride import SegDataModule as SegDataModuleStride
 from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
-from src.modelmodule.seg import SegModel
+from src.datamodule.seg_cat import SegDataModule as SegDataModuleCat
 from src.datamodule.centernet import CenterNetDataModule
+
+from src.modelmodule.seg import SegModel
+from src.modelmodule.seg_cat import SegModel as SegModelCat
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
@@ -45,6 +48,8 @@ def main(cfg: DictConfig):
     # init lightning model
     if cfg.model.name == "CenterNet":
         datamodule = CenterNetDataModule(cfg)
+    elif cfg.datamodule.how == "cat":
+        datamodule = SegDataModuleCat(cfg)
     elif cfg.datamodule.how == "random":
         datamodule = SegDataModule(cfg)
     elif cfg.datamodule.how == "stride":
@@ -52,14 +57,24 @@ def main(cfg: DictConfig):
     elif cfg.datamodule.how == "overlap":
         datamodule = SegDataModuleOverlap(cfg)
 
-    model = SegModel(
-        cfg,
-        datamodule.valid_event_df,
-        len(cfg.features),
-        len(cfg.labels),
-        cfg.duration,
-        datamodule,
-    )
+    if cfg.datamodule.how == "cat":
+        model = SegModelCat(
+            cfg,
+            datamodule.valid_event_df,
+            len(cfg.features),
+            len(cfg.labels),
+            cfg.duration,
+            datamodule,
+        )
+    else:
+        model = SegModel(
+            cfg,
+            datamodule.valid_event_df,
+            len(cfg.features),
+            len(cfg.labels),
+            cfg.duration,
+            datamodule,
+        )
 
     # set callbacks
     checkpoint_cb = ModelCheckpoint(

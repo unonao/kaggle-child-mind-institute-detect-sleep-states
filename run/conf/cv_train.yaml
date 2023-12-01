@@ -29,6 +29,8 @@ defaults:
   - post_process: train
   - ignore: zero
   - loss: bce
+  - cat_features: 001
+
 
 datamodule:
   how: random # random, stride, overlap
