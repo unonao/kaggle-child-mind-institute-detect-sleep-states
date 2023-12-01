@@ -327,6 +327,7 @@ class ValidDataset(Dataset):
             event_df.pivot(index=["series_id", "night"], columns="event", values="step").drop_nulls().to_pandas()
         )
         self.num_features = len(cfg.features)
+        self.num_cat_features = len(cfg.cat_features)
         self.upsampled_num_frames = nearest_valid_size(
             int(self.cfg.duration * self.cfg.upsample_rate), self.cfg.downsample_rate
         )
