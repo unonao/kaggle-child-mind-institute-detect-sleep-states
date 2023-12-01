@@ -12,6 +12,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms.functional import resize
 
 from src.utils.common import pad_if_needed
+from src.utils.periodicity import get_periodicity_dict
 
 
 ###################
@@ -22,6 +23,7 @@ def load_features(
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
 ) -> dict[str, np.ndarray]:
     features = {}
 
@@ -32,7 +34,12 @@ def load_features(
         series_dir = processed_dir / phase / series_id
         this_feature = []
         for feature_name in feature_names:
-            this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
+
         features[series_dir.name] = np.stack(this_feature, axis=1)
 
     return features
@@ -44,6 +51,7 @@ def load_chunk_features(
     series_ids: Optional[list[str]],
     processed_dir: Path,
     phase: str,
+    periodicity_dict: Optional[dict[str, np.ndarray]] = None,
     stride: int = 0,  # 初期値をstride だけずらしてchunkにする
     overlap: int = 0,  # https://www.kaggle.com/competitions/dfl-bundesliga-data-shootout/discussion/360236
     debug: bool = False,
@@ -58,7 +66,11 @@ def load_chunk_features(
         series_dir = processed_dir / phase / series_id
         this_feature = []
         for feature_name in feature_names:
-            this_feature.append(np.load(series_dir / f"{feature_name}.npy"))
+            feat = np.load(series_dir / f"{feature_name}.npy")
+            # 時間系の特徴量以外はperiodicityを考慮
+            if (periodicity_dict is not None) and (("_cos" not in feature_name) and ("_sin" not in feature_name)):
+                feat *= 1 - periodicity_dict[series_dir.name]
+            this_feature.append(feat)
 
         this_feature = np.stack(this_feature, axis=1)  # (n_steps, num_features)
         padding = np.zeros((overlap, len(this_feature[1])))  # 左端をゼロ埋めして後でカットする
@@ -191,6 +203,7 @@ class TrainDataset(Dataset):
         cfg: DictConfig,
         event_df: pl.DataFrame,
         features: dict[str, np.ndarray],
+        fold: int | None = None,
     ):
         self.cfg = cfg
         self.event_df: pd.DataFrame = (
@@ -203,12 +216,17 @@ class TrainDataset(Dataset):
         )
 
         self.sigma = self.cfg.sigma
+        self.epoch = 0
+        self.fold = fold
 
     def set_sigma(self, sigma):
         self.sigma = sigma
 
     def __len__(self):
         return len(self.event_df)
+
+    def set_epoch(self, epoch):
+        self.epoch = epoch
 
     def __getitem__(self, idx):
         event = np.random.choice(["onset", "wakeup"], p=[0.5, 0.5])
@@ -242,6 +260,9 @@ class TrainDataset(Dataset):
         label[:, [1, 2]] = gaussian_label(
             label[:, [1, 2]], offset=self.cfg.offset, sigma=self.sigma
         )  # onset, wakeup のみハードラベルなのでガウシアンラベルに変換
+
+        # 最大値が　cfg.datamodule.max_label_smoothing までになるようにminを取る
+        label = np.minimum(label, self.cfg.datamodule.max_label_smoothing)
 
         return {
             "series_id": series_id,
@@ -362,11 +383,15 @@ class SegDataModule(LightningDataModule):
         self.valid_event_df = self.event_df.filter(pl.col("series_id").is_in(self.valid_series_ids))
 
         # train data
+        periodicity_dict = None
+        if self.cfg.datamodule.zero_periodicity:
+            periodicity_dict = get_periodicity_dict(self.cfg)
         self.train_features = load_features(
             feature_names=self.cfg.features,
             series_ids=self.train_series_ids,
             processed_dir=self.processed_dir,
             phase="train",
+            periodicity_dict=periodicity_dict,
         )
 
         # valid data
@@ -377,6 +402,7 @@ class SegDataModule(LightningDataModule):
             processed_dir=self.processed_dir,
             overlap=self.cfg.datamodule.overlap,
             phase="train",
+            periodicity_dict=periodicity_dict,
         )
         self.sigma = cfg.sigma
 
@@ -395,7 +421,8 @@ class SegDataModule(LightningDataModule):
             features=self.train_features,
         )
         train_dataset.set_sigma(self.sigma)
-        print(f"sigma: {self.sigma}")
+        train_dataset.set_epoch(self.now_epoch)
+        print(f"sigma: {self.sigma}, epoch: {self.now_epoch}")
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.cfg.batch_size,
