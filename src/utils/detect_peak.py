@@ -305,6 +305,15 @@ def post_process_from_2nd(
 
                 # print(expectation_sum_3step[max_step_index], expectation_sum_9step[max_step_index])
 
+    if len(result_events_records) == 0:  # 一つも予測がない場合はdummyを入れる
+        result_events_records.append(
+            {
+                "series_id": series_id,
+                "step": 0,
+                "event": "onset",
+                "score": 0,
+            }
+        )
     sub_df = pl.DataFrame(result_events_records).sort(by=["series_id", "step"])
     row_ids = pl.Series(name="row_id", values=np.arange(len(sub_df)))
     sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
@@ -595,6 +604,15 @@ def post_process(
 
                 # print(expectation_sum_3step[max_step_index], expectation_sum_9step[max_step_index])
 
+    if len(result_events_records) == 0:  # 一つも予測がない場合はdummyを入れる
+        result_events_records.append(
+            {
+                "series_id": series_id,
+                "step": 0,
+                "event": "onset",
+                "score": 0,
+            }
+        )
     sub_df = pl.DataFrame(result_events_records).sort(by=["series_id", "step"])
     row_ids = pl.Series(name="row_id", values=np.arange(len(sub_df)))
     sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
