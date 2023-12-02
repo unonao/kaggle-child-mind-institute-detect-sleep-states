@@ -304,9 +304,11 @@ def main(cfg: DictConfig):
             this_series_preds = series2preds[series_id].reshape(-1, 3)
             this_series_preds = this_series_preds[: series_count_dict[series_id], :]
             preds_list.append(this_series_preds)
+        del series2preds
+        gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
         preds_all = np.concatenate(preds_list, axis=0)
         del preds_list
-        del series2preds
         gc.collect()
         ctypes.CDLL("libc.so.6").malloc_trim(0)
         pred_df = pl.DataFrame(
@@ -317,6 +319,9 @@ def main(cfg: DictConfig):
             ]
         )
         pred_df.write_parquet(f"{cfg.phase}_pred.parquet")
+        del preds_all
+        gc.collect()
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
 
     with trace("concat preds and seq_df"):
         pred_df = pl.concat([seq_df, pred_df], how="horizontal").with_columns(
