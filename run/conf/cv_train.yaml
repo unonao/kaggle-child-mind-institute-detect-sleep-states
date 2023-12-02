@@ -29,7 +29,7 @@ defaults:
   - post_process: train
   - ignore: zero
   - loss: bce
-  - cat_features: 001
+  - cat_features: base
 
 
 datamodule:
