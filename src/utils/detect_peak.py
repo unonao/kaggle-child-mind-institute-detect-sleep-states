@@ -5,10 +5,12 @@ from tqdm.auto import tqdm
 
 def post_process_from_2nd(
     pred_df,
-    event_rate: int | float = 0.005,
-    height: float = 0.1,
+    event_rate: int | float = 500,
+    height: float = 0.001,
     event2col: dict[str, str] = {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"},
-    weight_rate: float | None = None,
+    weight_rate: float | None = 1.2,
+    day_norm: bool = True,
+    daily_score_offset=0.15,
 ):
     """
     1分ごとの予測値を用いてイベントを検出する
@@ -19,9 +21,13 @@ def post_process_from_2nd(
     - 候補地点: event の候補となる 15秒 or 45秒始まりの30秒間隔の位置
 
     Args:
-        pred_df (pl.DataFrame):
+        pred_df (pl.DataFrame): timestamp 込み
         event_rate (int | float, optional): [0,1) の値であれば1分間に何回イベントが起こるか。intの場合はseries_idごとに同じイベント数を検出。 Defaults to 0.005.
         height (float, optional): 候補地点の期待値がこの値を下回ったら終了。 Defaults to 0.1.
+        event2col (dict[str, str], optional): event名と予測値のカラム名の対応。 Defaults to {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"}.
+        weight_rate (float | None, optional): 遠くの予測値の期待値を割り引く際の重み。Noneの場合は重みを1とする。1/weight_rate 倍ずつ遠くの予測値の重みが小さくなっていく。 Defaults to None.
+        day_norm (bool, optional): 一日ごとに予測値を正規化するかどうか。 Defaults to False.
+        daily_score_offset (float, optional): 正規化の際のoffset。 Defaults to 1.0.
     Returns:
         event_df (pl.DataFrame): row_id, series_id, step, event, score をカラムに持つ。
     """
@@ -48,6 +54,14 @@ def post_process_from_2nd(
 
         # series内でのindexを振り、chunk内での最大と最小を計算
         minute_pred_df = pred_df
+
+        if day_norm:
+            minute_pred_df = minute_pred_df.with_columns(
+                pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date")
+            ).with_columns(
+                pl.col(event_pred_col)
+                / (pl.col(event_pred_col).sum().over(["series_id", "date"]) + daily_score_offset)
+            )
 
         max_event_per_series = event_rate if isinstance(event_rate, int) else int(len(minute_pred_df) * event_rate)
 
@@ -293,7 +307,6 @@ def post_process_from_2nd(
                             print(f"power: {pi}→{pi-1}, pred:{pred}")
                             print()
                         """
-
                         # 9step
                         left_nums = [0] + high_match_nums
                         right_nums = [0] + low_match_nums
