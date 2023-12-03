@@ -9,9 +9,9 @@ def post_process_from_2nd(
     event_rate: int | float = 500,
     height: float = 0.001,
     event2col: dict[str, str] = {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"},
-    weight_rate: float | None = 1.2,
+    event2offset: dict[str, str] = {"onset": "5h", "wakeup": "0h"},
     day_norm: bool = True,
-    daily_score_offset=0.15,
+    daily_score_offset=10,
 ):
     """
     1分ごとの予測値を用いてイベントを検出する
@@ -32,7 +32,7 @@ def post_process_from_2nd(
     """
     high_match_nums = (0, 1, 3, 5, 8, 10, 13, 15, 20, 25, 30)
     low_match_nums = (0, 1, 3, 5, 7, 10, 12, 15, 20, 25, 30)
-    match_sums = np.array([np.power(weight_rate, i) for i in range(10)]) if weight_rate else np.ones(10)
+    match_sums = np.ones(10)
     result_events_records = []
 
     # event ごとに処理
@@ -52,11 +52,14 @@ def post_process_from_2nd(
         minute_pred_df = pred_df
 
         if day_norm:
-            minute_pred_df = minute_pred_df.with_columns(
-                pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date")
-            ).with_columns(
-                pl.col(event_pred_col)
-                / (pl.col(event_pred_col).sum().over(["series_id", "date"]) + daily_score_offset)
+            minute_pred_df = (
+                minute_pred_df.with_columns(
+                    pl.col("timestamp").dt.offset_by(event2offset[event]).dt.date().alias("date")
+                )
+                .with_columns(pl.col(event_pred_col).sum().over(["series_id", "date"]).alias("date_sum"))
+                .with_columns(
+                    pl.col(event_pred_col) / (pl.col("date_sum") + (1 / (daily_score_offset + pl.col("date_sum"))))
+                )
             )
 
         max_event_per_series = event_rate if isinstance(event_rate, int) else int(len(minute_pred_df) * event_rate)
@@ -254,6 +257,8 @@ def detect_events_for_serie(
             right_nums = low_match_nums
             max_step_index = max_step3
             max_score = max_score3
+            if max_score < height:  # 閾値以下なら終了
+                break
             result_steps.append(steps[max_step_index] + 3)
             result_scores.append(max_score)
         else:
@@ -262,10 +267,10 @@ def detect_events_for_serie(
             right_nums = high_match_nums
             max_step_index = max_step9
             max_score = max_score9
+            if max_score < height:  # 閾値以下なら終了
+                break
             result_steps.append(steps[max_step_index] + 9)
             result_scores.append(max_score)
-        if max_score < height:  # 閾値以下なら終了
-            break
         # print(f"max_step_index:{max_step_index}, max_score:{max_score}")
 
         # 3.2 期待値の割引
