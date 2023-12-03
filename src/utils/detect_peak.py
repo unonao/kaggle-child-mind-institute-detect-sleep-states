@@ -10,8 +10,9 @@ def post_process_from_2nd(
     height: float = 0.001,
     event2col: dict[str, str] = {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"},
     event2offset: dict[str, str] = {"onset": "5h", "wakeup": "0h"},
-    day_norm: bool = True,
+    use_daily_norm: bool = True,
     daily_score_offset=10,
+    later_date_max_sub_rate: float | None = 0.05,
 ):
     """
     1分ごとの予測値を用いてイベントを検出する
@@ -25,8 +26,9 @@ def post_process_from_2nd(
         height (float, optional): 候補地点の期待値がこの値を下回ったら終了。 Defaults to 0.1.
         event2col (dict[str, str], optional): event名と予測値のカラム名の対応。 Defaults to {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"}.
         weight_rate (float | None, optional): 遠くの予測値の期待値を割り引く際の重み。Noneの場合は重みを1とする。1/weight_rate 倍ずつ遠くの予測値の重みが小さくなっていく。 Defaults to None.
-        day_norm (bool, optional): 一日ごとに予測値を正規化するかどうか。 Defaults to False.
+        use_daily_norm (bool, optional): 一日ごとに予測値を正規化するかどうか。 Defaults to False.
         daily_score_offset (float, optional): 正規化の際のoffset。 Defaults to 1.0.
+        later_date_max_sub_rate (float | None, optional): 日付が古いほど予測値を割り引く際の最大割引率。Noneの場合は割引しない。 Defaults to None.
     Returns:
         event_df (pl.DataFrame): row_id, series_id, step, event, score をカラムに持つ。
     """
@@ -49,9 +51,9 @@ def post_process_from_2nd(
         """
 
         # series内でのindexを振り、chunk内での最大と最小を計算
-        minute_pred_df = pred_df
+        minute_pred_df = pred_df.filter(pl.col("timestamp").is_not_null())
 
-        if day_norm:
+        if use_daily_norm:
             minute_pred_df = (
                 minute_pred_df.with_columns(
                     pl.col("timestamp").dt.offset_by(event2offset[event]).dt.date().alias("date")
@@ -59,6 +61,23 @@ def post_process_from_2nd(
                 .with_columns(pl.col(event_pred_col).sum().over(["series_id", "date"]).alias("date_sum"))
                 .with_columns(
                     pl.col(event_pred_col) / (pl.col("date_sum") + (1 / (daily_score_offset + pl.col("date_sum"))))
+                )
+            )
+        if later_date_max_sub_rate is not None:
+            minute_pred_df = minute_pred_df.with_columns(
+                pl.col("date").min().over("series_id").alias("min_date"),
+                pl.col("date").max().over("series_id").alias("max_date"),
+            ).with_columns(
+                pl.col(event_pred_col)
+                * (
+                    pl.lit(1.0)
+                    - (
+                        pl.lit(later_date_max_sub_rate)
+                        * (
+                            (pl.col("date") - pl.col("min_date")).dt.days().cast(float)
+                            / ((pl.col("max_date") - pl.col("min_date")).dt.days().cast(float) + 1.0)
+                        )
+                    )
                 )
             )
 
