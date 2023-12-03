@@ -337,9 +337,14 @@ python run/train.py exp_name=exp088_cat_feat14_003_dim6 "pos_weight=[1.0, 5.0, 5
 
 python run/cv_train.py exp_name=exp088_cat_feat14_003 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=014"  datamodule.how=cat model=Spec2DCNNSplitCat model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=6 feature_extractor=LSTMFeatureExtractor "cat_features=003" augmentation.mixup_prob=0.7 "augmentation.mixup_alpha=0.5" offset=5
 
+python run/train.py exp_name=exp089_minute_pred "pos_weight=[1.0, 10.0, 10.0]" batch_size=8 "features=014"  model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=12 feature_extractor=LSTMFeatureExtractor augmentation.mixup_prob=0.5 "augmentation.mixup_alpha=0.5" offset=1
+
+python run/train.py exp_name=exp090_minute_pred "pos_weight=[1.0, 10.0, 10.0]" "label_weight=[0.0, 5.0, 5.0]" batch_size=8 "features=014"  model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=12 feature_extractor=LSTMFeatureExtractor augmentation.mixup_prob=0.5 "augmentation.mixup_alpha=0.5" offset=1
+
+python run/train.py exp_name=exp091_minute_pred "pos_weight=[1.0, 10.0, 10.0]" "label_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=014"  model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=12 feature_extractor=LSTMFeatureExtractor augmentation.mixup_prob=0.5 "augmentation.mixup_alpha=0.5" offset=1
+
 # todo
 
-python run/cv_train.py exp_name=exp089_minute_pred "pos_weight=[1.0, 10.0, 10.0]" batch_size=8 "features=014"  model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=12 feature_extractor=LSTMFeatureExtractor augmentation.mixup_prob=0.5 "augmentation.mixup_alpha=0.5" offset=1
-
+python run/cv_train.py exp_name=exp081_mixup_short_feat14 "pos_weight=[1.0, 5.0, 5.0]" batch_size=8 "features=014"  model=Spec2DCNNSplit model.n_split=1 epoch=30 monitor=val_score monitor_mode=max duration=17280 datamodule.zero_periodicity=True decoder.dropout=0.3 downsample_rate=6 feature_extractor=LSTMFeatureExtractor augmentation.mixup_prob=0.5 "augmentation.mixup_alpha=0.5" offset=5
 
 ```

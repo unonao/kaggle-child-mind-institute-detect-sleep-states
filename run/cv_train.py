@@ -27,6 +27,8 @@ from src.datamodule.seg_overlap import SegDataModule as SegDataModuleOverlap
 from src.modelmodule.seg import SegModel
 from src.datamodule.centernet import CenterNetDataModule
 from src.utils.metrics import event_detection_ap
+from src.datamodule.seg_cat import SegDataModule as SegDataModuleCat
+from src.modelmodule.seg_cat import SegModel as SegModelCat
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(name)s - %(message)s")
 LOGGER = logging.getLogger(Path(__file__).name)
@@ -50,6 +52,8 @@ def main(cfg: DictConfig):  # type: ignore
         # init lightning model
         if cfg.model.name == "CenterNet":
             datamodule = CenterNetDataModule(cfg, fold)
+        elif cfg.datamodule.how == "cat":
+            datamodule = SegDataModuleCat(cfg, fold)
         elif cfg.datamodule.how == "random":
             datamodule = SegDataModule(cfg, fold)
         elif cfg.datamodule.how == "stride":
@@ -58,9 +62,27 @@ def main(cfg: DictConfig):  # type: ignore
             datamodule = SegDataModuleOverlap(cfg, fold)
 
         LOGGER.info("Set Up DataModule")
-        model = SegModel(
-            cfg, datamodule.valid_event_df, len(cfg.features), len(cfg.labels), cfg.duration, datamodule, fold
-        )
+
+        if cfg.datamodule.how == "cat":
+            model = SegModelCat(
+                cfg,
+                datamodule.valid_event_df,
+                len(cfg.features),
+                len(cfg.labels),
+                cfg.duration,
+                datamodule,
+                fold,
+            )
+        else:
+            model = SegModel(
+                cfg,
+                datamodule.valid_event_df,
+                len(cfg.features),
+                len(cfg.labels),
+                cfg.duration,
+                datamodule,
+                fold,
+            )
 
         # set callbacks
         checkpoint_cb = ModelCheckpoint(

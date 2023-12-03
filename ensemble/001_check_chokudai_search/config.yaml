@@ -1,0 +1,21 @@
+hydra:
+  job:
+    name: ensemble
+    chdir: true
+  run:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}/cv
+  sweep:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}
+    subdir: run${hydra.job.num}
+  searchpath:
+      - file://run/conf/
+    
+defaults:
+  - _self_
+  - dir: local
+
+exp_name: "001_check_chokudai_search"
+
+path:
+  pred_onset: /tmp/working/notebook/pred_onset.parquet
+  pred_wakeup: /tmp/working/notebook/pred_wakeup.parquet
