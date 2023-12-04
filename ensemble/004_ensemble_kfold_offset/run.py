@@ -107,37 +107,39 @@ def load_and_concat_shimacos_preds(cfg, train_df):
 
 
 
-def objective(trial, names, train_df, event_df):
-    weights = [trial.suggest_float(name, 0, 1) for name in names]
-    weights = np.array(weights) / np.sum(weights)
-
-    # 予測値を作成
-    # TODO: null count の値に応じて重みを大きくする処理を加えてみる
-    pred_df = train_df.with_columns(
+def cal_score(name2weight, params, pred_df, event_df):
+    pred_df = pred_df.with_columns(
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in zip(names, weights)]).alias("stacking_prediction_onset"),
+            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_onset"),
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in zip(names, weights)]).alias("stacking_prediction_wakeup"),
+            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_wakeup"),
     )
-    # 予測値をイベントに変換
     sub_df = post_process_from_2nd(
         pred_df,
         later_date_max_sub_rate=None,
-        daily_score_offset=10,
+        daily_score_offset=params["daily_score_offset"],
         tqdm_disable=True,
     )
-
     score = event_detection_ap(
         event_df.to_pandas(),
         sub_df.to_pandas(),
         tqdm_disable=True,
     )
-
     return score
 
 
-def run_process(cfg,  names, train_df, event_df):
-    study = optuna.load_study(study_name=cfg.exp_name, storage='mysql://root@db/optuna')
+def objective(trial, names, train_df, event_df):
+    weights = [trial.suggest_float(name, 0, 1) for name in names]
+    params = {
+        "daily_score_offset": trial.suggest_float("daily_score_offset", 0, 20),
+    }
+    weights = np.array(weights) / np.sum(weights)
+    score = cal_score(dict(zip(names, weights)), params, train_df, event_df)
+    return score
+
+
+def run_process(cfg,  names, train_df, event_df, study_name):
+    study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
     study.optimize(lambda trial: objective(trial, names, train_df, event_df), 
                    n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
                    )
@@ -145,7 +147,7 @@ def run_process(cfg,  names, train_df, event_df):
 @hydra.main(config_path=".", config_name="config", version_base="1.2")
 def main(cfg: DictConfig):  # type: ignore
     LOGGER.info('-'*10 + ' START ' + '-'*10)
-    LOGGER.info(OmegaConf.to_container(cfg, resolve=True))
+    LOGGER.info({k: v for k, v in cfg.items() if "fold_" not in k})
 
     LOGGER.info("load data")
     event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
@@ -155,26 +157,80 @@ def main(cfg: DictConfig):  # type: ignore
     train_df = train_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")).filter(
         pl.col("step") % 12 == 0
     )
+    pred_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-    train_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-    names = [name for name in cfg.shimacos_models] + [name for name in cfg.sakami_models]
+    model_names = [name for name in cfg.shimacos_models] + [name for name in cfg.shimacos_nn_models] + [name for name in cfg.sakami_models]
 
     LOGGER.info("start optuna")
-    study = optuna.create_study(
-        study_name=f"{cfg.exp_name}", 
-        storage='mysql://root@db/optuna',
-        load_if_exists=cfg.optuna.load_if_exists,
-        direction="maximize",
-    )
 
-    process_ids = Parallel(n_jobs=cfg.optuna.n_jobs)(
-        delayed(run_process)(cfg, names, train_df, event_df) for _ in range(cfg.optuna.n_jobs)
-    )
+    model_weights_list = []
+    params_list = []
+    scores = []
+    for fold in range(cfg.n_fold):
+        LOGGER.info("-" * 10 + f"Fold: {fold}" + "-" * 10)
 
-    study = optuna.load_study(study_name="002_ensemble_all", storage='mysql://root@db/optuna')
-    normed_best_params = {name: value / np.sum(list(study.best_trial.params.values())) for name, value in study.best_trial.params.items()}
-    LOGGER.info(f"Best value: {study.best_value}, Best params: {normed_best_params}")
+        # データ分割
+        train_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].train_series_ids))
+        train_event_df = event_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].train_series_ids))
+        valid_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].valid_series_ids))
+        valid_event_df = event_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].valid_series_ids))
+
+        # debug
+        if cfg.debug:
+            num = 10
+            series_ids = train_df.get_column("series_id").unique().to_list()[:num]
+            train_df = train_df.filter(pl.col("series_id").is_in(series_ids))            
+            train_event_df = train_event_df.filter(pl.col("series_id").is_in(series_ids))
+
+        study_name = f"{cfg.exp_name}_{fold}_debug" if cfg.debug else f"{cfg.exp_name}_{fold}"
+        study = optuna.create_study(
+            study_name=study_name, 
+            storage=cfg.sql_storage,
+            load_if_exists=cfg.optuna.load_if_exists,
+            direction="maximize",
+        )
+        
+        # train optuna
+        _ = Parallel(n_jobs=cfg.optuna.n_jobs)(
+            delayed(run_process)(cfg, model_names, train_df, train_event_df, study_name) for _ in range(cfg.optuna.n_jobs)
+        )
+        study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
+
+
+        model_weights = {}
+        params = {}
+        for k,v in study.best_trial.params.items():
+            if k in model_names:
+                model_weights[k] = v
+            else:
+                params[k] = v
+        model_weights = {name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()}
+
+        # valid        
+        score = cal_score(model_weights, params, valid_df, valid_event_df)
+
+        model_weights_list.append(model_weights)
+        params_list.append(params)
+        scores.append(score)
+
+        LOGGER.info(f"Fold: {fold},  Best params: {params}, Valid score: {score}")
+        LOGGER.info(f"Fold: {fold},  Best model_weights: {model_weights}")
+
+    mean_best_model_weights = {}
+    for name in model_names:
+        mean_best_model_weights[name] = np.mean([model_weights[name] for model_weights in model_weights_list])
+    mean_best_params = {}
+    for k in params_list[0].keys():
+        mean_best_params[k] = np.mean([params[k] for params in params_list])
+
+    LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
+    LOGGER.info(f"Mean best params: {mean_best_params}")
+    LOGGER.info(f"Mean score: {np.mean(scores)}")
+    score = cal_score(mean_best_model_weights, mean_best_params, pred_df, event_df)
+    LOGGER.info(f"OOF score: {score}")
+
+
 
     LOGGER.info('-'*10 + ' END ' + '-'*10)
 

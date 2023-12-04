@@ -107,37 +107,39 @@ def load_and_concat_shimacos_preds(cfg, train_df):
 
 
 
-def objective(trial, names, train_df, event_df):
-    weights = [trial.suggest_float(name, 0, 1) for name in names]
-    weights = np.array(weights) / np.sum(weights)
-
-    # 予測値を作成
-    # TODO: null count の値に応じて重みを大きくする処理を加えてみる
-    pred_df = train_df.with_columns(
+def cal_score(name2weight, params, pred_df, event_df):
+    pred_df = pred_df.with_columns(
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in zip(names, weights)]).alias("stacking_prediction_onset"),
+            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_onset"),
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in zip(names, weights)]).alias("stacking_prediction_wakeup"),
+            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_wakeup"),
     )
-    # 予測値をイベントに変換
     sub_df = post_process_from_2nd(
         pred_df,
         later_date_max_sub_rate=None,
-        daily_score_offset=10,
+        daily_score_offset=params["daily_score_offset"],
         tqdm_disable=True,
     )
-
     score = event_detection_ap(
         event_df.to_pandas(),
         sub_df.to_pandas(),
         tqdm_disable=True,
     )
-
     return score
 
 
-def run_process(cfg,  names, train_df, event_df):
-    study = optuna.load_study(study_name=cfg.exp_name, storage='mysql://root@db/optuna')
+def objective(trial, names, train_df, event_df):
+    weights = [trial.suggest_float(name, 0, 1) for name in names]
+    params = {
+        "daily_score_offset": trial.suggest_float("daily_score_offset", 0.0, 20.0),
+    }
+    weights = np.array(weights) / np.sum(weights)
+    score = cal_score(dict(zip(names, weights)), params, train_df, event_df)
+    return score
+
+
+def run_process(cfg,  names, train_df, event_df, study_name):
+    study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
     study.optimize(lambda trial: objective(trial, names, train_df, event_df), 
                    n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
                    )
@@ -145,7 +147,7 @@ def run_process(cfg,  names, train_df, event_df):
 @hydra.main(config_path=".", config_name="config", version_base="1.2")
 def main(cfg: DictConfig):  # type: ignore
     LOGGER.info('-'*10 + ' START ' + '-'*10)
-    LOGGER.info(OmegaConf.to_container(cfg, resolve=True))
+    LOGGER.info({k: v for k, v in cfg.items() if "fold_" not in k})
 
     LOGGER.info("load data")
     event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
@@ -155,26 +157,45 @@ def main(cfg: DictConfig):  # type: ignore
     train_df = train_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")).filter(
         pl.col("step") % 12 == 0
     )
+    pred_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-    train_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-    names = [name for name in cfg.shimacos_models] + [name for name in cfg.sakami_models]
+    model_names = [name for name in cfg.shimacos_models] + [name for name in cfg.shimacos_nn_models] + [name for name in cfg.sakami_models]
 
     LOGGER.info("start optuna")
+
+    # debug
+    if cfg.debug:
+        num = 10
+        series_ids = pred_df.get_column("series_id").unique().to_list()[:num]
+        pred_df = pred_df.filter(pl.col("series_id").is_in(series_ids))            
+        event_df = event_df.filter(pl.col("series_id").is_in(series_ids))
+
+
+    study_name = f"{cfg.exp_name}_debug" if cfg.debug else f"{cfg.exp_name}"
     study = optuna.create_study(
-        study_name=f"{cfg.exp_name}", 
-        storage='mysql://root@db/optuna',
+        study_name=study_name, 
+        storage=cfg.sql_storage,
         load_if_exists=cfg.optuna.load_if_exists,
         direction="maximize",
     )
-
-    process_ids = Parallel(n_jobs=cfg.optuna.n_jobs)(
-        delayed(run_process)(cfg, names, train_df, event_df) for _ in range(cfg.optuna.n_jobs)
+    
+    # train optuna
+    _ = Parallel(n_jobs=cfg.optuna.n_jobs)(
+        delayed(run_process)(cfg, model_names, pred_df, event_df, study_name) for _ in range(cfg.optuna.n_jobs)
     )
+    study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
 
-    study = optuna.load_study(study_name="002_ensemble_all", storage='mysql://root@db/optuna')
-    normed_best_params = {name: value / np.sum(list(study.best_trial.params.values())) for name, value in study.best_trial.params.items()}
-    LOGGER.info(f"Best value: {study.best_value}, Best params: {normed_best_params}")
+    model_weights = {}
+    params = {}
+    for k,v in study.best_trial.params.items():
+        if k in model_names:
+            model_weights[k] = v
+        else:
+            params[k] = v
+    model_weights = {name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()}
+
+    LOGGER.info(f"Best train value: {study.best_value}, Best model_weights: {model_weights}, Best params: {params}")
 
     LOGGER.info('-'*10 + ' END ' + '-'*10)
 
