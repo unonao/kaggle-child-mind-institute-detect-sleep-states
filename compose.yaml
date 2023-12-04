@@ -1,7 +1,9 @@
 version: "3"
 services:
   kaggle:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - $PWD:/tmp/working
       - ./.py3/root_jupyter:/root/.jupyter # jupyterの設定

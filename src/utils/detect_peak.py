@@ -13,6 +13,7 @@ def post_process_from_2nd(
     use_daily_norm: bool = True,
     daily_score_offset=10,
     later_date_max_sub_rate: float | None = 0.05,
+    tqdm_disable: bool = False,
 ):
     """
     1分ごとの予測値を用いてイベントを検出する
@@ -189,6 +190,7 @@ def post_process_from_2nd(
             desc=f"detect {event} peaks",
             leave=False,
             total=len(minute_pred_df["series_id"].unique()),
+            disable=tqdm_disable,
         ):
             # chunkごとの id の最大最小を計算
             series_df = series_df.with_row_count().with_columns(

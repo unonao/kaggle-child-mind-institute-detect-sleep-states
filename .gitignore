@@ -13,6 +13,8 @@
 /.cupy
 .netrc
 /notebook/wandb
+/data
+/db
 .bash_history
 *.parquet
 # Byte-compiled / optimized / DLL files

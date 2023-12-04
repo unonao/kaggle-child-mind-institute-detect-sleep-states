@@ -80,6 +80,7 @@ def event_detection_ap(
     submission: pd.DataFrame,
     tolerances: Dict[str, List[float]] = tolerances,  # type: ignore
     with_table: bool = False,
+    tqdm_disable: bool = False,
 ) -> float | Tuple[float, pd.DataFrame]:
     # Ensure solution and submission are sorted properly
     solution = solution.sort_values([series_id_column_name, time_column_name])
@@ -144,7 +145,7 @@ def event_detection_ap(
     detections_matched = []
 
     for key, dets in tqdm(
-        detections_grouped, dynamic_ncols=True, leave=False, desc="Matching detections to ground truth events"
+        detections_grouped, dynamic_ncols=True, leave=False, desc="Matching detections to ground truth events", disable=tqdm_disable
     ):  # get_groupは時間がかかるので要素数の多いやつをfor文で取得
         gts = ground_truths_grouped.get_group(key)
         detections_matched.append(match_detections(commoon_tolerances, gts, dets))

@@ -1,6 +1,6 @@
 # Kaggle Child Mind Institute - Detect Sleep States
 
-
+cp kaggle_cmi/shimacos/stacking_exp028_021_from_016_192step
 
 ## How to use
 
@@ -10,6 +10,10 @@
 docker compose biuld
 docker compose run --rm kaggle bash # bash に入る
 docker compose up # jupyter lab 起動
+
+# cpu with db
+docker compose -f compose.cpu.yaml up -d 
+docker exec -it kaggle-cpu /bin/bash
 ```
 
 ### How to use
