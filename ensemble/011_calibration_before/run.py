@@ -13,6 +13,7 @@ from joblib import Parallel, delayed
 from pytorch_lightning import Trainer, seed_everything
 import pickle
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import GroupKFold
 
 from src.utils.metrics import event_detection_ap
 from src.utils.detect_peak import post_process_from_2nd
@@ -73,7 +74,7 @@ def load_shimacos_pred(cfg, name: str):
 
 def daily_normalize_df(train_df, name, daily_score_offset, event2offset: dict[str, str] = {"onset": "5h", "wakeup": "0h"}):
     for event, offset in event2offset.items():
-        event_pred_col = f"{name}_stacking_prediction_{event}"
+        event_pred_col = f"{name}_stacking_prediction_{event}" 
         train_df = (
             train_df.with_columns(
                 pl.col("timestamp").dt.offset_by(offset).dt.date().alias("date")
@@ -88,34 +89,49 @@ def daily_normalize_df(train_df, name, daily_score_offset, event2offset: dict[st
 def calibrate_df(cfg, pred_df, name):
     LOGGER.info(f"calibrate {name} pred")
     for event in ["onset", "wakeup"]:
-        event_pred_col = f"{name}_stacking_prediction_{event}"
-
+        event_pred_col = f"{name}_stacking_prediction_{event}" 
+        oof = np.zeros(len(pred_df))
+        # row_id を付与
+        pred_df = pred_df.with_columns( pl.arange(0, len(pred_df)).alias("row_id") )
         # クロスバリデーションでキャリブレーションを行う。作成したモデルは保存する        
         for fold in range(cfg.n_fold):
             train_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].train_series_ids))
             valid_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].valid_series_ids))
-
+            
+            prob = train_df.get_column(event_pred_col).to_numpy()
+            X = np.zeros((len(prob), 2))
+            X[:, 0] = 1-prob
+            X[:, 1] = prob
+            y = train_df.get_column(f"label_{event}").to_numpy()
+            
             calibrator = CalibratedClassifierCV(
                 cv=cfg.calibration.cv,
                 method=cfg.calibration.method,
             )
             calibrator.fit(
-                train_df.get_column(event_pred_col).to_numpy(),
-                train_df.get_column(f"label_{event}").to_numpy(),
+                X,
+                y,
             )
             model_dir = "models"
             os.makedirs(model_dir, exist_ok=True)
             with open(f"{model_dir}/{name}_{event}_calibrator_fold{fold}.pkl", "wb") as f:
                 pickle.dump(calibrator, f)
-            
 
+            X_val = np.zeros((len(valid_df), 2))
+            X_val[:, 0] = 1-valid_df.get_column(event_pred_col).to_numpy()
+            X_val[:, 1] = valid_df.get_column(event_pred_col).to_numpy()
+            oof[valid_df.get_column("row_id").to_numpy()] = calibrator.predict_proba(
+                X_val
+            )[:, 1]
         
-    return train_df
+        pred_df = pred_df.with_columns(
+            pl.Series(oof).alias(event_pred_col)
+        ) 
+    return pred_df
 
 def load_and_concat_shimacos_preds(cfg, train_df):
     # train_df に予測を結合する
     train_df = train_df.with_columns(pl.lit(0).alias("count"))
-
     for name in cfg.shimacos_nn_models:
         pred_df = load_shimacos_nn_pred(cfg, name)
         train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
@@ -204,24 +220,27 @@ def main(cfg: DictConfig):  # type: ignore
 
     LOGGER.info("load data")
     event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
-    event_df = event_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z"))
+    event_df = event_df.with_columns([pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z"), pl.col("step").cast(pl.UInt32)])
 
     train_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id", "step", "timestamp"])
     train_df = train_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")).filter(
         pl.col("step") % 12 == 0
     )
-    pred_df = load_and_concat_shimacos_preds(cfg, train_df)
-
     # event をラベルとして結合
-    pred_df = pred_df.join(event_df.select(["series_id", "step", "event"]), on=["series_id", "step", ], how="left")
+    train_df = train_df.join(event_df.select(["series_id", "step", "event"]), on=["series_id", "step"], how="left")
     # onset, wakeup をラベルとする
-    pred_df = pred_df.with_columns(
-        pl.col("event").str.contains("onset").cast(pl.Int8).alias("label_onset"),
-        pl.col("event").str.contains("wakeup").cast(pl.Int8).alias("label_wakeup"),
+    train_df = train_df.with_columns(
+        pl.col("event").str.contains("onset").cast(pl.Int8).alias("label_onset").fill_null(0),
+        pl.col("event").str.contains("wakeup").cast(pl.Int8).alias("label_wakeup").fill_null(0),
     )
 
+    pred_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-    model_names = [name for name in cfg.shimacos_models] + [name for name in cfg.shimacos_nn_models] + [name for name in cfg.sakami_models]
+    model_names = cfg.shimacos_models + cfg.shimacos_nn_models + cfg.sakami_models
+
+    for name in model_names:
+        pred_df = calibrate_df(cfg, pred_df, name)
+
 
     LOGGER.info("start optuna")
 

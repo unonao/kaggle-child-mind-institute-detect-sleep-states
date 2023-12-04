@@ -282,7 +282,15 @@ def main(cfg: DictConfig):  # type: ignore
     LOGGER.info(f"Mean best params: {mean_best_params}")
 
     def plot_histogram(data):
+        # 統計値の計算
+        mean = np.mean(data)
+        median = np.median(data)
+        min_val = np.min(data)
+        max_val = np.max(data)
+        std_dev = np.std(data)
+
         plt.hist(data, bins=10, color='blue', alpha=0.7)
+        plt.title(f"mean:{mean:.4}, median:{median:.4}, min:{min_val:.4}, max:{max_val:.4}, std:{std_dev:.4}")
         plt.xlabel('Score')
         plt.ylabel('Frequency')
         plt.savefig("score.png")
