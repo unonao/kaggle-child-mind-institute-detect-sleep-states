@@ -1,0 +1,50 @@
+hydra:
+  job:
+    name: ensemble
+    chdir: true
+  run:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}/cv
+  sweep:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}
+    subdir: run${hydra.job.num}
+  searchpath:
+      - file://run/conf/
+    
+defaults:
+  - _self_
+  - dir: local
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
+
+exp_name: "009_calibration_before"
+sql_storage: 'mysql://root@db/optuna'
+debug: False
+n_fold: 5
+seed: 42
+
+calibration:
+  cv: 5
+  method: method
+
+dir:
+  pred_path: /tmp/working/data
+  db: /tmp/working/
+
+optuna:
+  n_trials: 64
+  load_if_exists: True
+  n_jobs: 16
+
+shimacos_models:
+  #- stacking_exp013_009_1minute_sampling
+  - stacking_exp028_021_from_016_192step
+  - stacking_exp029_021_from_028_catboost
+shimacos_nn_models:
+  - stacking_exp030_021_chink_gru
+
+sakami_models: 
+  - 004_transformer_category_padding_idx
+  - 009_cnn
