@@ -19,7 +19,7 @@ defaults:
   - split@fold_3: stratify_fold_3
   - split@fold_4: stratify_fold_4
 
-exp_name: "004_ensemble_kfold_offset_v5"
+exp_name: "007_ensemble_kfold_offset_cnn"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
@@ -36,7 +36,7 @@ optuna:
   n_jobs: 16
 
 shimacos_models:
-  - stacking_exp013_009_1minute_sampling
+  #- stacking_exp013_009_1minute_sampling
   - stacking_exp028_021_from_016_192step
   - stacking_exp029_021_from_028_catboost
 shimacos_nn_models:
@@ -44,3 +44,4 @@ shimacos_nn_models:
 
 sakami_models: 
   - 004_transformer_category_padding_idx
+  - 009_cnn

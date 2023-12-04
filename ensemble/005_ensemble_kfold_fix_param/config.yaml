@@ -19,12 +19,14 @@ defaults:
   - split@fold_3: stratify_fold_3
   - split@fold_4: stratify_fold_4
 
-exp_name: "004_ensemble_kfold_offset_v5"
+exp_name: "005_ensemble_kfold_fix_param"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
 seed: 42
 
+params:
+  daily_score_offset: 3.3
 
 dir:
   pred_path: /tmp/working/data
