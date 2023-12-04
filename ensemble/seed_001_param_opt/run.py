@@ -148,6 +148,20 @@ def run_process(cfg,  names, train_df, event_df, study_name):
                    n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
                    )
 
+def plot_histogram(data, filename="score.png"):
+    # 統計値の計算
+    mean = np.mean(data)
+    median = np.median(data)
+    min_val = np.min(data)
+    max_val = np.max(data)
+    std_dev = np.std(data)
+
+    plt.hist(data, bins=10, color='blue', alpha=0.7)
+    plt.title(f"mean:{mean:.4}, median:{median:.4}, min:{min_val:.4}, max:{max_val:.4}, std:{std_dev:.4}")
+    plt.xlabel('Score')
+    plt.ylabel('Frequency')
+    plt.savefig(filename)
+
 @hydra.main(config_path=".", config_name="config", version_base="1.2")
 def main(cfg: DictConfig):  # type: ignore
     LOGGER.info('-'*20 + ' START ' + '-'*20)
@@ -199,7 +213,10 @@ def main(cfg: DictConfig):  # type: ignore
                 train_df = train_df.filter(pl.col("series_id").is_in(few_series_ids))            
                 train_event_df = train_event_df.filter(pl.col("series_id").is_in(few_series_ids))
 
-            study_name = f"{cfg.exp_name}_{seed}_{fold}_debug" if cfg.debug else f"{cfg.exp_name}_{fold}"
+            study_name = f"{cfg.exp_name}_{seed}_{fold}"
+            if cfg.debug:
+                study_name += "_debug"
+
             study = optuna.create_study(
                 study_name=study_name, 
                 storage=cfg.sql_storage,
@@ -250,6 +267,7 @@ def main(cfg: DictConfig):  # type: ignore
         seed_params_list.append(mean_best_params)
         seed_scores_by_mean_params.append(score)
 
+        plot_histogram(seed_all_scores, filename=f"score_{seed}.png")
         if cfg.debug:
             break
     
@@ -280,20 +298,6 @@ def main(cfg: DictConfig):  # type: ignore
     LOGGER.info(f"All score statistics:  mean: {mean}, median: {median}, min: {min_val}, max: {max_val}, std: {std}")
     LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
     LOGGER.info(f"Mean best params: {mean_best_params}")
-
-    def plot_histogram(data):
-        # 統計値の計算
-        mean = np.mean(data)
-        median = np.median(data)
-        min_val = np.min(data)
-        max_val = np.max(data)
-        std_dev = np.std(data)
-
-        plt.hist(data, bins=10, color='blue', alpha=0.7)
-        plt.title(f"mean:{mean:.4}, median:{median:.4}, min:{min_val:.4}, max:{max_val:.4}, std:{std_dev:.4}")
-        plt.xlabel('Score')
-        plt.ylabel('Frequency')
-        plt.savefig("score.png")
     
     plot_histogram(seed_all_scores)
 
