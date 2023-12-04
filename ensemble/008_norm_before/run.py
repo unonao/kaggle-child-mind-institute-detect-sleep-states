@@ -67,6 +67,22 @@ def load_shimacos_pred(cfg, name: str):
     )
     return pred_df.select(["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"])
 
+
+def daily_normalize_df(train_df, name, daily_score_offset, event2offset: dict[str, str] = {"onset": "5h", "wakeup": "0h"}):
+    for event, offset in event2offset.items():
+        event_pred_col = f"{name}_stacking_prediction_{event}"
+        train_df = (
+            train_df.with_columns(
+                pl.col("timestamp").dt.offset_by(offset).dt.date().alias("date")
+            )
+            .with_columns(pl.col(event_pred_col).sum().over(["series_id", "date"]).alias("date_sum"))
+            .with_columns(
+                pl.col(event_pred_col) / (pl.col("date_sum") + (1 / (daily_score_offset + pl.col("date_sum"))))
+            ).drop(["date_sum", "date"])
+        )
+    return train_df
+
+
 def load_and_concat_shimacos_preds(cfg, train_df):
     # train_df に予測を結合する
     train_df = train_df.with_columns(pl.lit(0).alias("count"))
@@ -74,17 +90,17 @@ def load_and_concat_shimacos_preds(cfg, train_df):
     for name in cfg.shimacos_nn_models:
         pred_df = load_shimacos_nn_pred(cfg, name)
         train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
+        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int))
 
     for name in cfg.shimacos_models:
         pred_df = load_shimacos_pred(cfg, name)
         train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
+        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int))
 
     for name in cfg.sakami_models:
         pred_df = load_sakami_pred(cfg, name)
         train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
+        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int))
 
 
     # countが0のものは除く
@@ -103,11 +119,18 @@ def load_and_concat_shimacos_preds(cfg, train_df):
         .alias("chunk_id")
     ).with_columns(pl.col("step").cast(pl.UInt32))
 
+
     return train_df
 
 
 
-def cal_score(name2weight, params, pred_df, event_df):
+def cal_score(cfg, name2weight, params, df, event_df):
+
+    # normalize
+    pred_df = df.clone()
+    for name in cfg.shimacos_nn_models + cfg.shimacos_models + cfg.sakami_models:
+        pred_df = daily_normalize_df(pred_df, name, params['daily_score_offset'])
+
     pred_df = pred_df.with_columns(
         pl.sum_horizontal(
             [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_onset"),
@@ -128,19 +151,19 @@ def cal_score(name2weight, params, pred_df, event_df):
     return score
 
 
-def objective(trial, names, train_df, event_df):
+def objective(trial, cfg, names, train_df, event_df):
     weights = [trial.suggest_float(name, 0, 1) for name in names]
     params = {
         "daily_score_offset": trial.suggest_float("daily_score_offset", 0, 20),
     }
     weights = np.array(weights) / np.sum(weights)
-    score = cal_score(dict(zip(names, weights)), params, train_df, event_df)
+    score = cal_score(cfg, dict(zip(names, weights)), params, train_df, event_df)
     return score
 
 
 def run_process(cfg,  names, train_df, event_df, study_name):
     study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
-    study.optimize(lambda trial: objective(trial, names, train_df, event_df), 
+    study.optimize(lambda trial: objective(trial, cfg, names, train_df, event_df), 
                    n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
                    )
 
@@ -208,7 +231,7 @@ def main(cfg: DictConfig):  # type: ignore
         model_weights = {name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()}
 
         # valid        
-        score = cal_score(model_weights, params, valid_df, valid_event_df)
+        score = cal_score(cfg, model_weights, params, valid_df, valid_event_df)
 
         model_weights_list.append(model_weights)
         params_list.append(params)
@@ -227,7 +250,7 @@ def main(cfg: DictConfig):  # type: ignore
     LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
     LOGGER.info(f"Mean best params: {mean_best_params}")
     LOGGER.info(f"Mean score: {np.mean(scores)}")
-    score = cal_score(mean_best_model_weights, mean_best_params, pred_df, event_df)
+    score = cal_score(cfg, mean_best_model_weights, mean_best_params, pred_df, event_df)
     LOGGER.info(f"OOF score: {score}")
 
 
