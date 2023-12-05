@@ -1,0 +1,47 @@
+hydra:
+  job:
+    name: ensemble
+    chdir: true
+  run:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}/cv
+  sweep:
+    dir: ${dir.output_dir}/${hydra.job.name}/${exp_name}
+    subdir: run${hydra.job.num}
+  searchpath:
+      - file://run/conf/
+    
+defaults:
+  - _self_
+  - dir: local
+
+exp_name: "final_002_only_offset"
+sql_storage: 'mysql://root@db/optuna'
+debug: False
+n_fold: 5
+seed: 42
+n_seed: 10
+
+
+dir:
+  pred_path: /tmp/working/data
+  db: /tmp/working/
+
+optuna:
+  n_trials: 8
+  load_if_exists: True
+  n_jobs: 2
+
+shimacos_models:
+  #- stacking_exp013_009_1minute_sampling
+  #- stacking_exp028_021_from_016_192step
+  #- stacking_exp029_021_from_028_catboost
+  - stacking_exp059_030_truncate_lgbm
+  - stacking_exp061_030_truncate_cat
+shimacos_nn_models:
+  #- stacking_exp030_021_chink_gru
+  - stacking_exp060_030_truncate_small
+
+sakami_models: 
+  - 004_transformer_category_padding_idx
+  # - 009_cnn
+  - 011_cnn_embedding_sync
