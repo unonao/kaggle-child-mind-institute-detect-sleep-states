@@ -14,20 +14,34 @@ defaults:
   - _self_
   - dir: local
 
-exp_name: "seed_001_param_opt_v4"
+exp_name: "lb_fit_check_001"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
 seed: 42
-n_seed: 10
+n_seed: 100
 
+
+name2weight:
+  stacking_exp028_021_from_016_192step: 0.17974514198498276
+  stacking_exp029_021_from_028_catboost: 0.128142040651809
+  stacking_exp030_021_chink_gru: 0.12650030330772288
+  004_transformer_category_padding_idx: 0.22507631533063793
+  009_cnn: 0.34053619872484754
+
+pp_params:
+  daily_score_offset: 
+  event_rate: 500
+  height: 0.001
+  use_daily_norm: True
+  later_date_max_sub_rate:
 
 dir:
   pred_path: /tmp/working/data
   db: /tmp/working/
 
 optuna:
-  n_trials: 32
+  n_trials: 16
   load_if_exists: True
   n_jobs: 8
 

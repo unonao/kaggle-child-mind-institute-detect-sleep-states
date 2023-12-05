@@ -14,7 +14,7 @@ defaults:
   - _self_
   - dir: local
 
-exp_name: "seed_001_param_opt_v4"
+exp_name: "seed_006_daily_norm_same"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
@@ -33,11 +33,15 @@ optuna:
 
 shimacos_models:
   #- stacking_exp013_009_1minute_sampling
-  - stacking_exp028_021_from_016_192step
-  - stacking_exp029_021_from_028_catboost
+  #- stacking_exp028_021_from_016_192step
+  #- stacking_exp029_021_from_028_catboost
+  - stacking_exp059_030_truncate_lgbm
+  - stacking_exp061_030_truncate_cat
 shimacos_nn_models:
-  - stacking_exp030_021_chink_gru
+  #- stacking_exp030_021_chink_gru
+  - stacking_exp060_030_truncate_small
 
 sakami_models: 
   - 004_transformer_category_padding_idx
-  - 009_cnn
+  # - 009_cnn
+  - 011_cnn_embedding_sync

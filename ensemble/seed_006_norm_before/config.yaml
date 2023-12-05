@@ -14,7 +14,7 @@ defaults:
   - _self_
   - dir: local
 
-exp_name: "seed_001_param_opt_v4"
+exp_name: "seed_006_norm_before"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5

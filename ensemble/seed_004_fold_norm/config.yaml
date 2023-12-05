@@ -13,8 +13,13 @@ hydra:
 defaults:
   - _self_
   - dir: local
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
 
-exp_name: "seed_001_param_opt_v4"
+exp_name: "seed_004_fold_norm"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5

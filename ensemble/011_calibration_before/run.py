@@ -88,34 +88,40 @@ def daily_normalize_df(train_df, name, daily_score_offset, event2offset: dict[st
 
 def calibrate_df(cfg, pred_df, name):
     LOGGER.info(f"calibrate {name} pred")
+    model_dir = "models"
+    os.makedirs(model_dir, exist_ok=True)
     for event in ["onset", "wakeup"]:
         event_pred_col = f"{name}_stacking_prediction_{event}" 
         oof = np.zeros(len(pred_df))
         # row_id を付与
-        pred_df = pred_df.with_columns( pl.arange(0, len(pred_df)).alias("row_id") )
+        pred_df = pred_df.with_columns(pl.arange(0, len(pred_df)).alias("row_id"))
         # クロスバリデーションでキャリブレーションを行う。作成したモデルは保存する        
         for fold in range(cfg.n_fold):
             train_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].train_series_ids))
             valid_df = pred_df.filter(pl.col("series_id").is_in(cfg[f"fold_{fold}"].valid_series_ids))
-            
-            prob = train_df.get_column(event_pred_col).to_numpy()
-            X = np.zeros((len(prob), 2))
-            X[:, 0] = 1-prob
-            X[:, 1] = prob
-            y = train_df.get_column(f"label_{event}").to_numpy()
-            
-            calibrator = CalibratedClassifierCV(
-                cv=cfg.calibration.cv,
-                method=cfg.calibration.method,
-            )
-            calibrator.fit(
-                X,
-                y,
-            )
-            model_dir = "models"
-            os.makedirs(model_dir, exist_ok=True)
-            with open(f"{model_dir}/{name}_{event}_calibrator_fold{fold}.pkl", "wb") as f:
-                pickle.dump(calibrator, f)
+
+            model_path = f"{model_dir}/{name}_{event}_calibrator_fold{fold}.pkl"
+
+            if os.path.exists(model_path):
+                with open(model_path, "rb") as f:
+                    calibrator = pickle.load(f)
+            else:            
+                prob = train_df.get_column(event_pred_col).to_numpy()
+                X = np.zeros((len(prob), 2))
+                X[:, 0] = 1-prob
+                X[:, 1] = prob
+                y = train_df.get_column(f"label_{event}").to_numpy()
+                
+                calibrator = CalibratedClassifierCV(
+                    cv=cfg.calibration.cv,
+                    method=cfg.calibration.method,
+                )
+                calibrator.fit(
+                    X,
+                    y,
+                )
+                with open(path, "wb") as f:
+                    pickle.dump(calibrator, f)
 
             X_val = np.zeros((len(valid_df), 2))
             X_val[:, 0] = 1-valid_df.get_column(event_pred_col).to_numpy()

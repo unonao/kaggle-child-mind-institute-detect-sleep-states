@@ -13,23 +13,36 @@ hydra:
 defaults:
   - _self_
   - dir: local
+  - split@fold_0: stratify_fold_0
+  - split@fold_1: stratify_fold_1
+  - split@fold_2: stratify_fold_2
+  - split@fold_3: stratify_fold_3
+  - split@fold_4: stratify_fold_4
 
-exp_name: "seed_001_param_opt_v4"
+exp_name: "007_ensemble_kfold_offset_cnn"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
 seed: 42
-n_seed: 10
 
 
 dir:
   pred_path: /tmp/working/data
   db: /tmp/working/
 
-optuna:
-  n_trials: 32
-  load_if_exists: True
-  n_jobs: 8
+name2weight:
+  stacking_exp028_021_from_016_192step: 0.17974514198498276
+  stacking_exp029_021_from_028_catboost: 0.128142040651809
+  stacking_exp030_021_chink_gru: 0.12650030330772288
+  004_transformer_category_padding_idx: 0.22507631533063793
+  009_cnn: 0.34053619872484754
+
+pp_params:
+  daily_score_offset: 3.84
+  event_rate: 500
+  height: 0.001
+  use_daily_norm: True
+  later_date_max_sub_rate:
 
 shimacos_models:
   #- stacking_exp013_009_1minute_sampling
