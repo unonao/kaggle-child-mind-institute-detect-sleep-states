@@ -24,37 +24,52 @@ LOGGER = logging.getLogger(Path(__file__).name)
 
 def load_sakami_pred(cfg, name):
     LOGGER.info(f"load {name} pred")
-    pred_df = pl.concat(
-            [ 
-                pl.read_parquet(Path(cfg.dir.pred_path) / "009.parquet",columns=['series_id', 'step', 'timestamp']),
-                pl.read_parquet(Path(cfg.dir.pred_path) / f'sakami/{name}/valid_preds.parquet')
-            ], how="horizontal"
-        ).with_columns(
-            pl.col("step").cast(pl.UInt32)
-        ).rename({
-            "stacking_prediction_onset": f"{name}_stacking_prediction_onset",
-            "stacking_prediction_wakeup": f"{name}_stacking_prediction_wakeup",
-            })
-    return pred_df.select(["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"])
+    pred_df = (
+        pl.concat(
+            [
+                pl.read_parquet(Path(cfg.dir.pred_path) / "009.parquet", columns=["series_id", "step", "timestamp"]),
+                pl.read_parquet(Path(cfg.dir.pred_path) / f"sakami/{name}/valid_preds.parquet"),
+            ],
+            how="horizontal",
+        )
+        .with_columns(pl.col("step").cast(pl.UInt32))
+        .rename(
+            {
+                "stacking_prediction_onset": f"{name}_stacking_prediction_onset",
+                "stacking_prediction_wakeup": f"{name}_stacking_prediction_wakeup",
+            }
+        )
+    )
+    return pred_df.select(
+        ["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"]
+    )
+
 
 def load_shimacos_nn_pred(cfg, name: str):
     LOGGER.info(f"load {name} pred")
     pred_df = (
-        pl.concat(
-            [
-                pl.read_parquet(Path(cfg.dir.pred_path) / f"shimacos/{name}/fold{i}/result/valid.parquet") for i in range(5)
-            ],
-            how="vertical"
+        (
+            pl.concat(
+                [
+                    pl.read_parquet(Path(cfg.dir.pred_path) / f"shimacos/{name}/fold{i}/result/valid.parquet")
+                    for i in range(5)
+                ],
+                how="vertical",
+            )
         )
-    ).with_columns(
-        pl.col("step").cast(pl.UInt32)
-    ).with_columns(
-            pl.col("step").cast(pl.UInt32)
-    ).rename({
-        "label_onset_pred": f"{name}_stacking_prediction_onset",
-        "label_wakeup_pred": f"{name}_stacking_prediction_wakeup",}
+        .with_columns(pl.col("step").cast(pl.UInt32))
+        .with_columns(pl.col("step").cast(pl.UInt32))
+        .rename(
+            {
+                "label_onset_pred": f"{name}_stacking_prediction_onset",
+                "label_wakeup_pred": f"{name}_stacking_prediction_wakeup",
+            }
+        )
     )
-    return pred_df.select(["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"])
+    return pred_df.select(
+        ["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"]
+    )
+
 
 def load_shimacos_pred(cfg, name: str):
     LOGGER.info(f"load {name} pred")
@@ -63,13 +78,18 @@ def load_shimacos_pred(cfg, name: str):
         .rename({"label_pred": f"{name}_stacking_prediction_onset"})
         .drop("label")
         .join(
-            pl.read_parquet(Path(cfg.dir.pred_path) / f"shimacos/{name}/result/pred_wakeup.parquet").rename(
-                {"label_pred": f"{name}_stacking_prediction_wakeup"}).drop("label"),
+            pl.read_parquet(Path(cfg.dir.pred_path) / f"shimacos/{name}/result/pred_wakeup.parquet")
+            .rename({"label_pred": f"{name}_stacking_prediction_wakeup"})
+            .drop("label"),
             on=["series_id", "step"],
             how="left",
-        ).with_columns(pl.col("step").cast(pl.UInt32))
+        )
+        .with_columns(pl.col("step").cast(pl.UInt32))
     )
-    return pred_df.select(["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"])
+    return pred_df.select(
+        ["series_id", "step", f"{name}_stacking_prediction_onset", f"{name}_stacking_prediction_wakeup"]
+    )
+
 
 def load_and_concat_shimacos_preds(cfg, train_df):
     # train_df に予測を結合する
@@ -77,19 +97,24 @@ def load_and_concat_shimacos_preds(cfg, train_df):
 
     for name in cfg.shimacos_nn_models:
         pred_df = load_shimacos_nn_pred(cfg, name)
-        train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
+        train_df = train_df.join(pred_df, on=["series_id", "step"], how="outer")
+        train_df = train_df.with_columns(
+            pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)
+        )  # null でないものの数をカウント
 
     for name in cfg.shimacos_models:
         pred_df = load_shimacos_pred(cfg, name)
-        train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
+        train_df = train_df.join(pred_df, on=["series_id", "step"], how="outer")
+        train_df = train_df.with_columns(
+            pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)
+        )  # null でないものの数をカウント
 
     for name in cfg.sakami_models:
         pred_df = load_sakami_pred(cfg, name)
-        train_df = train_df.join(pred_df, on=['series_id', 'step'], how='outer')
-        train_df = train_df.with_columns(pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)) # null でないものの数をカウント
-
+        train_df = train_df.join(pred_df, on=["series_id", "step"], how="outer")
+        train_df = train_df.with_columns(
+            pl.col("count") + pl.col(f"{name}_stacking_prediction_onset").is_not_null().cast(int)
+        )  # null でないものの数をカウント
 
     # countが0のものは除く
     train_df = train_df.filter(pl.col("count") > 0)
@@ -110,13 +135,14 @@ def load_and_concat_shimacos_preds(cfg, train_df):
     return train_df
 
 
-
 def cal_score(name2weight, params, pred_df, event_df):
     pred_df = pred_df.with_columns(
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_onset"),
+            [pl.col(f"{name}_stacking_prediction_onset") * weight for name, weight in name2weight.items()]
+        ).alias("stacking_prediction_onset"),
         pl.sum_horizontal(
-            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in name2weight.items()]).alias("stacking_prediction_wakeup"),
+            [pl.col(f"{name}_stacking_prediction_wakeup") * weight for name, weight in name2weight.items()]
+        ).alias("stacking_prediction_wakeup"),
     )
     sub_df = post_process_from_2nd(
         pred_df,
@@ -135,25 +161,26 @@ def cal_score(name2weight, params, pred_df, event_df):
 def objective(trial, names, train_df, event_df):
     weight_sum = 12
     name2weight = {
-        "stacking_exp059_030_truncate_lgbm": 2/weight_sum,
-        "stacking_exp061_030_truncate_cat": 3/weight_sum,
-        "stacking_exp060_030_truncate_small": 2/weight_sum,
-        "004_transformer_category_padding_idx":2/weight_sum,
-        "011_cnn_embedding_sync": 3/weight_sum
+        "stacking_exp059_030_truncate_lgbm": 2 / weight_sum,
+        "stacking_exp061_030_truncate_cat": 3 / weight_sum,
+        "stacking_exp060_030_truncate_small": 2 / weight_sum,
+        "004_transformer_category_padding_idx": 2 / weight_sum,
+        "011_cnn_embedding_sync": 3 / weight_sum,
     }
     params = {
         "daily_score_offset": trial.suggest_float("daily_score_offset", 0, 20, step=0.5),
     }
-    weights = np.array(weights) / np.sum(weights)
     score, _ = cal_score(name2weight, params, train_df, event_df)
     return score
 
 
-def run_process(cfg,  names, train_df, event_df, study_name):
+def run_process(cfg, names, train_df, event_df, study_name):
     study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
-    study.optimize(lambda trial: objective(trial, names, train_df, event_df), 
-                   n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
-                   )
+    study.optimize(
+        lambda trial: objective(trial, names, train_df, event_df),
+        n_trials=cfg.optuna.n_trials // cfg.optuna.n_jobs,
+    )
+
 
 def plot_histogram(data, filename="score.png"):
     # 統計値の計算
@@ -163,33 +190,38 @@ def plot_histogram(data, filename="score.png"):
     max_val = np.max(data)
     std_dev = np.std(data)
 
-    plt.hist(data, bins=10, color='blue', alpha=0.7)
+    plt.hist(data, bins=10, color="blue", alpha=0.7)
     plt.title(f"mean:{mean:.4}, median:{median:.4}, min:{min_val:.4}, max:{max_val:.4}, std:{std_dev:.4}")
-    plt.xlabel('Value')
-    plt.ylabel('Frequency')
+    plt.xlabel("Value")
+    plt.ylabel("Frequency")
     plt.savefig(filename)
     plt.close()
 
+
 @hydra.main(config_path=".", config_name="config", version_base="1.2")
 def main(cfg: DictConfig):  # type: ignore
-    LOGGER.info('-'*20 + ' START ' + '-'*20)
+    LOGGER.info("-" * 20 + " START " + "-" * 20)
     LOGGER.info({k: v for k, v in cfg.items() if "fold_" not in k})
 
     LOGGER.info("load data")
     event_df = pl.read_csv(Path(cfg.dir.data_dir) / "train_events.csv").drop_nulls()
     event_df = event_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z"))
 
-    train_df = pl.read_parquet(Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id", "step", "timestamp"])
+    train_df = pl.read_parquet(
+        Path(cfg.dir.data_dir) / "train_series.parquet", columns=["series_id", "step", "timestamp"]
+    )
     train_df = train_df.with_columns(pl.col("timestamp").str.to_datetime("%Y-%m-%dT%H:%M:%S%z")).filter(
         pl.col("step") % 12 == 0
     )
     pred_df = load_and_concat_shimacos_preds(cfg, train_df)
 
-
-    model_names = [name for name in cfg.shimacos_models] + [name for name in cfg.shimacos_nn_models] + [name for name in cfg.sakami_models]
+    model_names = (
+        [name for name in cfg.shimacos_models]
+        + [name for name in cfg.shimacos_nn_models]
+        + [name for name in cfg.sakami_models]
+    )
 
     LOGGER.info("start optuna")
-
 
     seed_model_weights_list = []
     seed_params_list = []
@@ -198,7 +230,7 @@ def main(cfg: DictConfig):  # type: ignore
 
     series_ids = event_df.get_column("series_id").unique(maintain_order=True).to_list()
 
-    for seed in range(cfg.seed, cfg.seed+cfg.n_seed):
+    for seed in range(cfg.seed, cfg.seed + cfg.n_seed):
         LOGGER.info("-" * 10 + f"Seed: {seed}" + "-" * 10)
         model_weights_list = []
         params_list = []
@@ -218,7 +250,7 @@ def main(cfg: DictConfig):  # type: ignore
             if cfg.debug:
                 num = 10
                 few_series_ids = train_df.get_column("series_id").unique().to_list()[:num]
-                train_df = train_df.filter(pl.col("series_id").is_in(few_series_ids))            
+                train_df = train_df.filter(pl.col("series_id").is_in(few_series_ids))
                 train_event_df = train_event_df.filter(pl.col("series_id").is_in(few_series_ids))
 
             study_name = f"{cfg.exp_name}_{seed}_{fold}"
@@ -226,29 +258,31 @@ def main(cfg: DictConfig):  # type: ignore
                 study_name += "_debug"
 
             study = optuna.create_study(
-                study_name=study_name, 
+                study_name=study_name,
                 storage=cfg.sql_storage,
                 load_if_exists=cfg.optuna.load_if_exists,
                 direction="maximize",
             )
-            
+
             # train optuna
             _ = Parallel(n_jobs=cfg.optuna.n_jobs)(
-                delayed(run_process)(cfg, model_names, train_df, train_event_df, study_name) for _ in range(cfg.optuna.n_jobs)
+                delayed(run_process)(cfg, model_names, train_df, train_event_df, study_name)
+                for _ in range(cfg.optuna.n_jobs)
             )
             study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
 
-
             model_weights = {}
             params = {}
-            for k,v in study.best_trial.params.items():
+            for k, v in study.best_trial.params.items():
                 if k in model_names:
                     model_weights[k] = v
                 else:
                     params[k] = v
-            model_weights = {name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()}
+            model_weights = {
+                name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()
+            }
 
-            # valid        
+            # valid
             score, _ = cal_score(model_weights, params, valid_df, valid_event_df)
 
             model_weights_list.append(model_weights)
@@ -276,12 +310,15 @@ def main(cfg: DictConfig):  # type: ignore
 
         plot_histogram(seed_all_scores, filename=f"score_{seed}.png")
         for name in model_names:
-            plot_histogram([model_weights[name] for model_weights in seed_model_weights_list], filename=f"weight_{name}_{seed}.png")
+            plot_histogram(
+                [model_weights[name] for model_weights in seed_model_weights_list],
+                filename=f"weight_{name}_{seed}.png",
+            )
         for k in params_list[0].keys():
             plot_histogram([params[k] for params in seed_params_list], filename=f"param_{k}_{seed}.png")
         if cfg.debug:
             break
-    
+
     LOGGER.info("-" * 10 + "Result" + "-" * 10)
     mean_best_model_weights = {}
     for name in model_names:
@@ -289,7 +326,6 @@ def main(cfg: DictConfig):  # type: ignore
     mean_best_params = {}
     for k in params_list[0].keys():
         mean_best_params[k] = np.mean([params[k] for params in seed_params_list])
-    
 
     # seed_scores_by_mean_params
     mean = np.mean(seed_scores_by_mean_params)
@@ -297,7 +333,9 @@ def main(cfg: DictConfig):  # type: ignore
     min_val = np.min(seed_scores_by_mean_params)
     max_val = np.max(seed_scores_by_mean_params)
     std = np.std(seed_scores_by_mean_params)
-    LOGGER.info(f"Score by mean params statistics:  mean: {mean}, median: {median}, min: {min_val}, max: {max_val}, std: {std}")
+    LOGGER.info(
+        f"Score by mean params statistics:  mean: {mean}, median: {median}, min: {min_val}, max: {max_val}, std: {std}"
+    )
 
     # seed_all_scores
     mean = np.mean(seed_all_scores)
@@ -309,10 +347,11 @@ def main(cfg: DictConfig):  # type: ignore
     LOGGER.info(f"All score statistics:  mean: {mean}, median: {median}, min: {min_val}, max: {max_val}, std: {std}")
     LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
     LOGGER.info(f"Mean best params: {mean_best_params}")
-    
+
     plot_histogram(seed_all_scores)
 
-    LOGGER.info('-'*20 + ' END ' + '-'*20)
+    LOGGER.info("-" * 20 + " END " + "-" * 20)
+
 
 if __name__ == "__main__":
     main()
