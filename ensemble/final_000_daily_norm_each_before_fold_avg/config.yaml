@@ -14,12 +14,12 @@ defaults:
   - _self_
   - dir: local
 
-exp_name: "seed_006_daily_norm_each"
+exp_name: "final_000_daily_norm_each_before_fold_avg"
 sql_storage: 'mysql://root@db/optuna'
 debug: False
 n_fold: 5
 seed: 42
-n_seed: 10
+n_seed: 5
 
 
 dir:
@@ -27,7 +27,7 @@ dir:
   db: /tmp/working/
 
 optuna:
-  n_trials: 32
+  n_trials: 96
   load_if_exists: True
   n_jobs: 8
 

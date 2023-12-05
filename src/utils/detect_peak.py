@@ -4,6 +4,227 @@ from tqdm.auto import tqdm
 from numba import jit
 
 
+
+def post_process_from_2nd_old(
+    pred_df,
+    event_rate: int | float = 500,
+    height: float = 0.001,
+    event2col: dict[str, str] = {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"},
+    weight_rate: float | None = 1.2,
+    day_norm: bool = True,
+    daily_score_offset=0.15,
+):
+    """
+    1分ごとの予測値を用いてイベントを検出する
+    用語
+    - 予測地点: 2段目のモデルによって得られた1分毎の予測位置
+    - 候補地点: event の候補となる 15秒 or 45秒始まりの30秒間隔の位置
+
+    Args:
+        pred_df (pl.DataFrame): timestamp 込み
+        event_rate (int | float, optional): [0,1) の値であれば1分間に何回イベントが起こるか。intの場合はseries_idごとに同じイベント数を検出。 Defaults to 0.005.
+        height (float, optional): 候補地点の期待値がこの値を下回ったら終了。 Defaults to 0.1.
+        event2col (dict[str, str], optional): event名と予測値のカラム名の対応。 Defaults to {"onset": "stacking_prediction_onset", "wakeup": "stacking_prediction_wakeup"}.
+        weight_rate (float | None, optional): 遠くの予測値の期待値を割り引く際の重み。Noneの場合は重みを1とする。1/weight_rate 倍ずつ遠くの予測値の重みが小さくなっていく。 Defaults to None.
+        day_norm (bool, optional): 一日ごとに予測値を正規化するかどうか。 Defaults to False.
+        daily_score_offset (float, optional): 正規化の際のoffset。 Defaults to 1.0.
+    Returns:
+        event_df (pl.DataFrame): row_id, series_id, step, event, score をカラムに持つ。
+    """
+    high_match_nums = (0, 1, 3, 5, 8, 10, 13, 15, 20, 25, 30)
+    low_match_nums = (0, 1, 3, 5, 7, 10, 12, 15, 20, 25, 30)
+    match_sums = np.array([np.power(weight_rate, i) for i in range(10)]) if weight_rate else np.ones(10)
+    result_events_records = []
+
+    # event ごとに処理
+    for event, event_pred_col in event2col.items():
+        """
+        元の系列の予測地点(長さN): 0, 12, 24, 36, 48, 60, 72, 84, 96, 108, ..., (N-1)*12
+        15秒から30秒おきのevent候補地点(長さ2N): 3, 9, 15, 21, 27, 33, 39, 45, 51, 57, ..., (N-1)*12+3, (N-1)*12+9
+            - 15秒(3step)から1分おき(長さN): 3, 15, 27, 39, 51, 63, 75, 87, 99, 111, ..., (N-1)*12+3
+                - 左の個数 {12: 1, 36: 3, 60: 5, 90: *8*, 120: 10, 150: *13*, 180: 15, 240: 20, 300: 25, 360: 30} high_match_nums
+                - 右の個数 {12: 1, 36: 3, 60: 5, 90: *7*, 120: 10, 150: *12*, 180: 15, 240: 20, 300: 25, 360: 30} low_match_nums
+            - 45秒(9step)から1分おき(長さN): 9, 21, 33, 45, 57, 69, 81, 93, 105, 117, ..., (N-1)*12+9
+                - 左の個数 {12: 1, 36: 3, 60: 5, 90: *7*, 120: 10, 150: *12*, 180: 15, 240: 20, 300: 25, 360: 30} low_match_nums
+                - 右の個数 {12: 1, 36: 3, 60: 5, 90: *8*, 120: 10, 150: *13*, 180: 15, 240: 20, 300: 25, 360: 30} high_match_nums       
+        """
+
+        # series内でのindexを振り、chunk内での最大と最小を計算
+        minute_pred_df = pred_df
+
+        if day_norm:
+            minute_pred_df = minute_pred_df.with_columns(
+                pl.col("timestamp").dt.offset_by("2h").dt.date().alias("date")
+            ).with_columns(
+                pl.col(event_pred_col)
+                / (pl.col(event_pred_col).sum().over(["series_id", "date"]) + daily_score_offset)
+            )
+
+        max_event_per_series = event_rate if isinstance(event_rate, int) else int(len(minute_pred_df) * event_rate)
+
+        # series_id, chunk_id, step でソート
+        minute_pred_df = minute_pred_df.sort(["series_id", "chunk_id", "step"])
+
+        # 1. 期待値の計算
+        # 1.1 左側を計算 (同じindexの予測を含む左側を計算)
+        """
+        以下をそれぞれ計算する
+        - 15秒(3step)から1分おき(長さN)での候補地点での期待値: stepは 3, 15, 27, 39, 51, 63, 75, 87, 99, 111, ..., (N-1)*12+3
+        - 45秒(9step)から1分おき(長さN)での候補地点での期待値: stepは 9, 21, 33, 45, 57, 69, 81, 93, 105, 117, ..., (N-1)*12+9
+        計算は左側の予測地点の数と、右側の予測地点の数
+        """
+        minute_pred_df = minute_pred_df.with_columns(
+            pl.sum_horizontal(
+                [
+                    (
+                        pl.col(event_pred_col)
+                        .rolling_sum(window_size=window, center=False, min_periods=1)
+                        .over(["series_id", "chunk_id"])
+                        / match_sums[i]
+                    )
+                    for i, window in enumerate(high_match_nums[1:])
+                ]
+            ).alias(f"{event}_left_expectation_plus_3step"),
+            pl.sum_horizontal(
+                [
+                    (
+                        pl.col(event_pred_col)
+                        .rolling_sum(window_size=window, center=False, min_periods=1)
+                        .over(["series_id", "chunk_id"])
+                        / match_sums[i]
+                    )
+                    for i, window in enumerate(low_match_nums[1:])
+                ]
+            ).alias(f"{event}_left_expectation_plus_9step"),
+        )
+
+        # 1.2 右側を計算(同じindexの予測を含まない右側を計算。逆順にして一個ずらしrolling_sumを取る必要がある）
+        minute_pred_df = minute_pred_df.reverse()
+        minute_pred_df = minute_pred_df.with_columns(
+            pl.sum_horizontal(
+                [
+                    (
+                        pl.col(event_pred_col)
+                        .shift(1)
+                        .rolling_sum(window_size=window, center=False, min_periods=1)
+                        .over(["series_id", "chunk_id"])
+                        .fill_null(0)
+                        / match_sums[i]
+                    )
+                    for i, window in enumerate(low_match_nums[1:])
+                ]
+            ).alias(f"{event}_right_expectation_plus_3step"),
+            pl.sum_horizontal(
+                [
+                    (
+                        pl.col(event_pred_col)
+                        .shift(1)
+                        .rolling_sum(window_size=window, center=False, min_periods=1)
+                        .over(["series_id", "chunk_id"])
+                        .fill_null(0)
+                        / match_sums[i]
+                    )
+                    for i, window in enumerate(high_match_nums[1:])
+                ]
+            ).alias(f"{event}_right_expectation_plus_9step"),
+        )
+        minute_pred_df = minute_pred_df.reverse()
+
+        # 合計の期待値計算
+        minute_pred_df = minute_pred_df.with_columns(
+            (pl.col(f"{event}_left_expectation_plus_3step") + pl.col(f"{event}_right_expectation_plus_3step")).alias(
+                f"{event}_expectation_sum_3step"
+            ),
+            (pl.col(f"{event}_left_expectation_plus_9step") + pl.col(f"{event}_right_expectation_plus_9step")).alias(
+                f"{event}_expectation_sum_9step"
+            ),
+        )
+
+        # print(display(minute_pred_df))
+
+        # 3. 最大値の取得 & 期待値の割引
+        """
+        各予測地点の power を管理する。powerは以下の11種類
+        0: その予測地点が影響を与える範囲は無い
+        1: その予測地点が影響を与える範囲は左右1つ(1min)
+        2: その予測地点が影響を与える範囲は左右3つ
+        ︙
+        10: 左右30(step 0~360)
+
+        event を作るたびに、eventからtolerance内にある予測地点のpowerを下げる。
+        その際に予測地点からtolerance内にある、eventがあったところも含めた候補地点の期待値を割り引く。
+        """
+        for series_id, series_df in tqdm(
+            minute_pred_df.select(
+                [
+                    "series_id",
+                    "chunk_id",
+                    "step",
+                    event_pred_col,
+                    f"{event}_expectation_sum_3step",
+                    f"{event}_expectation_sum_9step",
+                ]
+            ).group_by("series_id"),
+            desc=f"detect {event} peaks",
+            leave=False,
+            total=len(minute_pred_df["series_id"].unique()),
+        ):
+            # chunkごとの id の最大最小を計算
+            series_df = series_df.with_row_count().with_columns(
+                pl.col("row_nr").max().over(["chunk_id"]).alias("max_id_in_chunk"),
+                pl.col("row_nr").min().over(["chunk_id"]).alias("min_id_in_chunk"),
+            )
+
+            preds = series_df[event_pred_col].to_numpy()
+            expectation_sum_3step = series_df[f"{event}_expectation_sum_3step"].to_numpy(writable=True)
+            expectation_sum_9step = series_df[f"{event}_expectation_sum_9step"].to_numpy(writable=True)
+            steps = series_df[f"step"].to_numpy(writable=True)
+            step_id_mins = series_df["min_id_in_chunk"].to_numpy(writable=True)
+            step_id_maxs = series_df["max_id_in_chunk"].to_numpy(writable=True) + 1
+            powers = np.ones(len(expectation_sum_3step), dtype=np.int32) * 10
+
+            result_steps, result_scores = detect_events_for_serie(
+                height,
+                max_event_per_series,
+                high_match_nums,
+                low_match_nums,
+                match_sums,
+                steps,
+                step_id_mins,
+                step_id_maxs,
+                preds,
+                expectation_sum_3step,
+                expectation_sum_9step,
+                powers,
+            )
+
+            for i in range(len(result_steps)):
+                result_events_records.append(
+                    {
+                        "series_id": series_id,
+                        "step": result_steps[i],
+                        "event": event,
+                        "score": result_scores[i],
+                    }
+                )
+
+            # print(expectation_sum_3step[max_step_index], expectation_sum_9step[max_step_index])
+
+    if len(result_events_records) == 0:  # 一つも予測がない場合はdummyを入れる
+        result_events_records.append(
+            {
+                "series_id": series_id,
+                "step": 0,
+                "event": "onset",
+                "score": 0,
+            }
+        )
+    sub_df = pl.DataFrame(result_events_records).sort(by=["series_id", "step"])
+    row_ids = pl.Series(name="row_id", values=np.arange(len(sub_df)))
+    sub_df = sub_df.with_columns(row_ids).select(["row_id", "series_id", "step", "event", "score"])
+    return sub_df
+
+
 def post_process_from_2nd(
     pred_df,
     event_rate: int | float = 500,

@@ -41,6 +41,7 @@ shimacos_nn_models:
   #- stacking_exp030_021_chink_gru
   - stacking_exp060_030_truncate_small
 
+
 sakami_models: 
   - 004_transformer_category_padding_idx
   # - 009_cnn
