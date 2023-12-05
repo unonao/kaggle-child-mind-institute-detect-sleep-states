@@ -27,7 +27,7 @@ dir:
   db: /tmp/working/
 
 optuna:
-  n_trials: 8
+  n_trials: 16
   load_if_exists: True
   n_jobs: 8
 
