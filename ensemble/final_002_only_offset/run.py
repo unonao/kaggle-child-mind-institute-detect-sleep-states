@@ -22,6 +22,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s:%(na
 LOGGER = logging.getLogger(Path(__file__).name)
 
 
+weight_sum = 12
+name2weight = {
+    "stacking_exp059_030_truncate_lgbm": 2 / weight_sum,
+    "stacking_exp061_030_truncate_cat": 3 / weight_sum,
+    "stacking_exp060_030_truncate_small": 2 / weight_sum,
+    "004_transformer_category_padding_idx": 2 / weight_sum,
+    "011_cnn_embedding_sync": 3 / weight_sum,
+}
+
+
 def load_sakami_pred(cfg, name):
     LOGGER.info(f"load {name} pred")
     pred_df = (
@@ -159,14 +169,6 @@ def cal_score(name2weight, params, pred_df, event_df):
 
 
 def objective(trial, names, train_df, event_df):
-    weight_sum = 12
-    name2weight = {
-        "stacking_exp059_030_truncate_lgbm": 2 / weight_sum,
-        "stacking_exp061_030_truncate_cat": 3 / weight_sum,
-        "stacking_exp060_030_truncate_small": 2 / weight_sum,
-        "004_transformer_category_padding_idx": 2 / weight_sum,
-        "011_cnn_embedding_sync": 3 / weight_sum,
-    }
     params = {
         "daily_score_offset": trial.suggest_float("daily_score_offset", 0, 20, step=0.5),
     }
@@ -223,7 +225,6 @@ def main(cfg: DictConfig):  # type: ignore
 
     LOGGER.info("start optuna")
 
-    seed_model_weights_list = []
     seed_params_list = []
     seed_scores_by_mean_params = []
     seed_all_scores = []
@@ -232,7 +233,6 @@ def main(cfg: DictConfig):  # type: ignore
 
     for seed in range(cfg.seed, cfg.seed + cfg.n_seed):
         LOGGER.info("-" * 10 + f"Seed: {seed}" + "-" * 10)
-        model_weights_list = []
         params_list = []
         scores = []
         kf = KFold(n_splits=cfg.n_fold, shuffle=True, random_state=seed)
@@ -271,58 +271,34 @@ def main(cfg: DictConfig):  # type: ignore
             )
             study = optuna.load_study(study_name=study_name, storage=cfg.sql_storage)
 
-            model_weights = {}
+            # valid
             params = {}
             for k, v in study.best_trial.params.items():
-                if k in model_names:
-                    model_weights[k] = v
-                else:
-                    params[k] = v
-            model_weights = {
-                name: weight / np.sum(list(model_weights.values())) for name, weight in model_weights.items()
-            }
+                params[k] = v
+            score, _ = cal_score(name2weight, params, valid_df, valid_event_df)
 
-            # valid
-            score, _ = cal_score(model_weights, params, valid_df, valid_event_df)
-
-            model_weights_list.append(model_weights)
-            seed_model_weights_list.append(model_weights)
             params_list.append(params)
             seed_params_list.append(params)
             scores.append(score)
             seed_all_scores.append(score)
             LOGGER.info(f"Fold: {fold},  Best params: {params}, Valid score: {score}")
-            LOGGER.info(f"Fold: {fold},  Best model_weights: {model_weights}")
 
-        mean_best_model_weights = {}
-        for name in model_names:
-            mean_best_model_weights[name] = np.mean([model_weights[name] for model_weights in model_weights_list])
         mean_best_params = {}
         for k in params_list[0].keys():
             mean_best_params[k] = np.mean([params[k] for params in params_list])
 
-        LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
         LOGGER.info(f"Mean best params: {mean_best_params}")
         LOGGER.info(f"Mean score: {np.mean(scores)}")
-        score, _ = cal_score(mean_best_model_weights, mean_best_params, pred_df, event_df)
+        score, _ = cal_score(name2weight, mean_best_params, pred_df, event_df)
         LOGGER.info(f"Score by mean params: {score}")
         seed_scores_by_mean_params.append(score)
 
-        plot_histogram(seed_all_scores, filename=f"score_{seed}.png")
-        for name in model_names:
-            plot_histogram(
-                [model_weights[name] for model_weights in seed_model_weights_list],
-                filename=f"weight_{name}_{seed}.png",
-            )
         for k in params_list[0].keys():
             plot_histogram([params[k] for params in seed_params_list], filename=f"param_{k}_{seed}.png")
         if cfg.debug:
             break
 
     LOGGER.info("-" * 10 + "Result" + "-" * 10)
-    mean_best_model_weights = {}
-    for name in model_names:
-        mean_best_model_weights[name] = np.mean([model_weights[name] for model_weights in seed_model_weights_list])
     mean_best_params = {}
     for k in params_list[0].keys():
         mean_best_params[k] = np.mean([params[k] for params in seed_params_list])
@@ -345,7 +321,6 @@ def main(cfg: DictConfig):  # type: ignore
     std = np.std(seed_all_scores)
 
     LOGGER.info(f"All score statistics:  mean: {mean}, median: {median}, min: {min_val}, max: {max_val}, std: {std}")
-    LOGGER.info(f"Mean best model_weights: {mean_best_model_weights}")
     LOGGER.info(f"Mean best params: {mean_best_params}")
 
     plot_histogram(seed_all_scores)
